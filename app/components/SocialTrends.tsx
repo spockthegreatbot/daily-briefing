@@ -56,31 +56,29 @@ function ViralFeed() {
 
   useEffect(() => {
     setLoading(true)
-    Promise.all([
-      // HN via our API route
-      fetch('/api/trends')
-        .then((r) => r.json())
-        .then((d) => setHnItems(Array.isArray(d.trends) ? d.trends : []))
-        .catch(() => {}),
-      // Reddit — client-side fetch (browser passes CORS, server gets blocked)
-      fetch('https://www.reddit.com/r/all.json?limit=25&t=day', {
-        headers: { 'User-Agent': 'Mozilla/5.0' },
+    const hnPromise = fetch('/api/trends')
+      .then((r) => r.json())
+      .then((d) => setHnItems(Array.isArray(d.trends) ? d.trends : []))
+      .catch(() => {})
+
+    const redditPromise = fetch('https://www.reddit.com/r/all.json?limit=25&t=day')
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => {
+        if (!d) return
+        const posts =
+          d?.data?.children?.map((c: { data: { title: string; subreddit: string; score: number; num_comments: number; permalink: string; link_flair_text: string | null } }) => ({
+            title:     c.data.title,
+            subreddit: c.data.subreddit,
+            score:     c.data.score,
+            comments:  c.data.num_comments,
+            url:       `https://reddit.com${c.data.permalink}`,
+            flair:     c.data.link_flair_text,
+          })) ?? []
+        setRedditPosts(posts)
       })
-        .then((r) => r.json())
-        .then((d) => {
-          const posts =
-            d?.data?.children?.map((c: { data: { title: string; subreddit: string; score: number; num_comments: number; permalink: string; link_flair_text: string | null } }) => ({
-              title:     c.data.title,
-              subreddit: c.data.subreddit,
-              score:     c.data.score,
-              comments:  c.data.num_comments,
-              url:       `https://reddit.com${c.data.permalink}`,
-              flair:     c.data.link_flair_text,
-            })) ?? []
-          setRedditPosts(posts)
-        })
-        .catch(() => {}),
-    ]).finally(() => setLoading(false))
+      .catch(() => {})
+
+    Promise.all([hnPromise, redditPromise]).finally(() => setLoading(false))
   }, [])
 
   if (loading) return <EmptyState msg="LOADING VIRAL FEED..." />

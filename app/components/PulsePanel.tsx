@@ -121,7 +121,7 @@ export function PulsePanel() {
       .catch(() => {})
 
     // Reddit top post (client-side)
-    fetch('https://www.reddit.com/r/all.json?limit=5&t=day')
+    fetch('https://www.reddit.com/r/all.json?limit=5&t=day', { mode: 'cors' })
       .then(r => r.json())
       .then(d => {
         const c = d?.data?.children?.[0]?.data

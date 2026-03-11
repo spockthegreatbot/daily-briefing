@@ -14,6 +14,8 @@
   --fg:        #F0EDE8;
   --muted-mid: #605850;
   --muted:     #403830;
+  --border:    rgba(240,237,232,0.08);
+  --accent:    #C8102E;
 }
 
 @theme inline {
