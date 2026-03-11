@@ -9,71 +9,41 @@ import { RefreshProvider } from './components/RefreshProvider'
 
 export const revalidate = 300
 
-function LoadingBox({ text }: { text: string }) {
-  return (
-    <div
-      style={{
-        fontFamily: "ui-monospace, 'SF Mono', monospace",
-        fontSize: 11,
-        color: '#403830',
-        padding: '20px 0',
-      }}
-    >
-      {text}
-    </div>
-  )
-}
-
 export default async function Page() {
   return (
     <RefreshProvider>
-      <div style={{ minHeight: '100vh', backgroundColor: '#16161A', color: '#F0EDE8' }}>
+      <div className="min-h-screen bg-[var(--bg-base)] text-[var(--fg)]">
         <Header />
 
         <Suspense fallback={null}>
           <PulseTicker />
         </Suspense>
 
-        <main style={{ maxWidth: 1600, margin: '0 auto', padding: '20px 24px' }}>
-          <div
-            className="hub-grid"
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'clamp(280px, 32%, 480px) 1fr clamp(260px, 30%, 420px)',
-              gap: 28,
-              alignItems: 'start',
-            }}
-          >
+        <main className="max-w-[1600px] mx-auto px-6 py-5">
+          <div className="hub-grid grid gap-7 items-start"
+            style={{ gridTemplateColumns: 'clamp(260px, 28%, 420px) minmax(0, 1fr) clamp(240px, 26%, 380px)' }}>
+
             {/* Col 1 — World News */}
             <NewsPanel />
 
-            {/* Col 2 — Social Trends */}
-            <SocialTrends />
+            {/* Col 2 — Viral / Social */}
+            <div className="min-w-0">
+              <SocialTrends />
+            </div>
 
             {/* Col 3 — Crypto + Pulse */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <Suspense fallback={<LoadingBox text="Loading crypto data..." />}>
+            <div className="flex flex-col gap-4">
+              <Suspense fallback={<p className="font-mono text-xs text-[var(--muted)] py-5">Loading…</p>}>
                 <CryptoPanel />
               </Suspense>
               <PulsePanel />
             </div>
+
           </div>
         </main>
 
-        {/* Footer */}
-        <footer
-          style={{
-            borderTop: '1px solid rgba(240,237,232,0.06)',
-            padding: '16px 24px',
-            textAlign: 'center',
-            fontFamily: "ui-monospace, 'SF Mono', monospace",
-            fontSize: 10,
-            color: '#403830',
-            letterSpacing: '0.1em',
-            marginTop: 32,
-          }}
-        >
-          Daily Briefing · Refreshes every 5 min · Guardian + Reddit + CoinGecko
+        <footer className="border-t border-white/[0.06] px-6 py-4 text-center font-mono text-[10px] text-[var(--muted)] tracking-widest mt-8">
+          DAILY BRIEFING · AUTO-REFRESH 5MIN · GUARDIAN · NEWSAPI · REDDIT · GOOGLE TRENDS · COINGECKO
         </footer>
       </div>
     </RefreshProvider>
