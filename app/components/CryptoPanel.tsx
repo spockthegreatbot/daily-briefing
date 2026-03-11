@@ -135,7 +135,7 @@ export function CryptoPanel() {
                 <span style={{ fontSize: 12, color: 'var(--muted)' }}>{c.item.name}</span>
               </div>
               <span style={{ fontFamily: "ui-monospace,'SF Mono',monospace", fontSize: 12, fontWeight: 700, color: isUp ? '#22c55e' : '#ef4444' }}>
-                {change !== 0 ? `${isUp ? '+' : ''}${change.toFixed(1)}%` : '—'}
+                {typeof change === 'number' && change !== 0 ? `${isUp ? '+' : ''}${change.toFixed(1)}%` : '—'}
               </span>
             </div>
           )

@@ -13,7 +13,8 @@ type GlobalMarket = {
 type TopPost = { title: string; url: string; subreddit: string; score: number }
 type TopNews = { title: string; url: string; source: string }
 
-function fmtCap(n: number) {
+function fmtCap(n: number | undefined | null) {
+  if (!n || isNaN(n)) return '—'
   if (n >= 1e12) return `$${(n / 1e12).toFixed(2)}T`
   if (n >= 1e9)  return `$${(n / 1e9).toFixed(1)}B`
   return `$${n.toLocaleString()}`
@@ -190,11 +191,11 @@ export function PulsePanel() {
           {global ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               {[
-                { label: 'TOTAL CAP', value: fmtCap(global.total_market_cap.usd) },
-                { label: '24H CHANGE', value: `${capUp ? '+' : ''}${capChg.toFixed(2)}%`, color: capUp ? '#22c55e' : '#ef4444' },
-                { label: 'BTC DOM', value: `${global.btc_dominance.toFixed(1)}%` },
-                { label: 'ETH DOM', value: `${global.eth_dominance.toFixed(1)}%` },
-                { label: 'COINS', value: global.active_cryptocurrencies.toLocaleString() },
+                { label: 'TOTAL CAP', value: fmtCap(global.total_market_cap?.usd) },
+                { label: '24H CHANGE', value: capChg != null ? `${capUp ? '+' : ''}${capChg.toFixed(2)}%` : '—', color: capUp ? '#22c55e' : '#ef4444' },
+                { label: 'BTC DOM', value: global.btc_dominance != null ? `${global.btc_dominance.toFixed(1)}%` : '—' },
+                { label: 'ETH DOM', value: global.eth_dominance != null ? `${global.eth_dominance.toFixed(1)}%` : '—' },
+                { label: 'COINS', value: global.active_cryptocurrencies?.toLocaleString() ?? '—' },
               ].map(row => (
                 <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontFamily: "ui-monospace,'SF Mono',monospace", fontSize: 10, color: 'var(--muted)' }}>{row.label}</span>
