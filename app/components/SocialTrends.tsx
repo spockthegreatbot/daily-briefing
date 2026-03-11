@@ -1,15 +1,103 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { RedditPanel } from './RedditPanel'
-import { ConnectPanel } from './ConnectPanel'
+
+type TwitterTrend = { rank: number; topic: string; volume?: string }
+type TikTokTrend = { rank: number; tag: string; views?: string }
+type InstagramTrend = { rank: number; tag: string }
+
+type SocialData = {
+  twitter: { trends: TwitterTrend[] }
+  tiktok: { trends: TikTokTrend[] }
+  instagram: { trends: InstagramTrend[] }
+}
 
 type Tab = 'REDDIT' | 'TWITTER' | 'TIKTOK' | 'INSTAGRAM'
 const TABS: Tab[] = ['REDDIT', 'TWITTER', 'TIKTOK', 'INSTAGRAM']
 
+function TrendRow({ rank, label, meta }: { rank: number; label: string; meta?: string }) {
+  return (
+    <div className="flex items-baseline justify-between py-2 border-b border-white/5">
+      <div className="flex items-baseline gap-3">
+        <span
+          style={{ fontFamily: "ui-monospace, 'SF Mono', monospace", fontSize: 11 }}
+          className="text-[#403830] w-5 shrink-0"
+        >
+          {rank}
+        </span>
+        <span
+          style={{ fontFamily: "ui-monospace, 'SF Mono', monospace", fontSize: 15 }}
+          className="text-[#F0EDE8]"
+        >
+          {label}
+        </span>
+      </div>
+      {meta && (
+        <span
+          style={{ fontFamily: "ui-monospace, 'SF Mono', monospace", fontSize: 11 }}
+          className="text-[#605850] shrink-0 ml-3"
+        >
+          {meta}
+        </span>
+      )}
+    </div>
+  )
+}
+
+function TwitterList({ trends }: { trends: TwitterTrend[] }) {
+  if (trends.length === 0) return <p style={{ fontFamily: "ui-monospace, 'SF Mono', monospace", fontSize: 15 }} className="text-[#403830] py-5">No trends available</p>
+  return (
+    <div>
+      {trends.map((t) => (
+        <TrendRow key={t.rank} rank={t.rank} label={t.topic} meta={t.volume || undefined} />
+      ))}
+    </div>
+  )
+}
+
+function TikTokList({ trends }: { trends: TikTokTrend[] }) {
+  if (trends.length === 0) return <p style={{ fontFamily: "ui-monospace, 'SF Mono', monospace", fontSize: 15 }} className="text-[#403830] py-5">No trends available</p>
+  return (
+    <div>
+      {trends.map((t) => (
+        <TrendRow key={t.rank} rank={t.rank} label={t.tag} meta={t.views || undefined} />
+      ))}
+    </div>
+  )
+}
+
+function InstagramList({ trends }: { trends: InstagramTrend[] }) {
+  if (trends.length === 0) return <p style={{ fontFamily: "ui-monospace, 'SF Mono', monospace", fontSize: 15 }} className="text-[#403830] py-5">No trends available</p>
+  return (
+    <div>
+      {trends.map((t) => (
+        <TrendRow key={t.rank} rank={t.rank} label={t.tag} />
+      ))}
+    </div>
+  )
+}
+
 export function SocialTrends() {
   const [active, setActive] = useState<Tab>('REDDIT')
+  const [data, setData] = useState<SocialData | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    function fetchData() {
+      fetch('/api/social')
+        .then((r) => r.json())
+        .then((d: SocialData) => {
+          setData(d)
+          setLoading(false)
+        })
+        .catch(() => setLoading(false))
+    }
+    fetchData()
+    const id = setInterval(fetchData, 5 * 60 * 1000)
+    return () => clearInterval(id)
+  }, [])
 
   return (
     <div>
@@ -32,7 +120,6 @@ export function SocialTrends() {
           display: 'flex',
           borderBottom: '1px solid rgba(240,237,232,0.08)',
           marginBottom: 16,
-          gap: 0,
         }}
       >
         {TABS.map((tab) => (
@@ -74,29 +161,19 @@ export function SocialTrends() {
           transition={{ duration: 0.15 }}
         >
           {active === 'REDDIT' && <RedditPanel />}
-          {active === 'TWITTER' && (
-            <ConnectPanel
-              sectionNum="02"
-              title="TWITTER / X TRENDING"
-              envKey="TWITTER_BEARER_TOKEN"
-              note="When connected: trending topics, volume, trend direction"
-            />
+          {active !== 'REDDIT' && loading && (
+            <p style={{ fontFamily: "ui-monospace, 'SF Mono', monospace", fontSize: 15 }} className="text-[#403830] py-5">
+              Loading...
+            </p>
           )}
-          {active === 'TIKTOK' && (
-            <ConnectPanel
-              sectionNum="02"
-              title="TIKTOK TRENDING"
-              envKey="TIKTOK_API_KEY"
-              note="TikTok Research API — apply at developers.tiktok.com"
-            />
+          {active === 'TWITTER' && !loading && (
+            <TwitterList trends={data?.twitter?.trends ?? []} />
           )}
-          {active === 'INSTAGRAM' && (
-            <ConnectPanel
-              sectionNum="02"
-              title="INSTAGRAM TRENDING"
-              envKey="INSTAGRAM_ACCESS_TOKEN"
-              note="Meta Graph API — basic display or business account needed"
-            />
+          {active === 'TIKTOK' && !loading && (
+            <TikTokList trends={data?.tiktok?.trends ?? []} />
+          )}
+          {active === 'INSTAGRAM' && !loading && (
+            <InstagramList trends={data?.instagram?.trends ?? []} />
           )}
         </motion.div>
       </AnimatePresence>

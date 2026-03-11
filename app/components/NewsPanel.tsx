@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 
 type Article = {
   id: string
-  webTitle: string
+  webTitle?: string
   webUrl: string
   webPublicationDate: string
   fields?: {
@@ -16,6 +16,8 @@ type Article = {
   sectionName?: string
 }
 
+type NewsSource = 'guardian' | 'newsapi'
+
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime()
   const mins = Math.floor(diff / 60000)
@@ -26,26 +28,30 @@ function timeAgo(dateStr: string): string {
 }
 
 export function NewsPanel() {
+  const [source, setSource] = useState<NewsSource>('guardian')
   const [articles, setArticles] = useState<Article[]>([])
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
 
   useEffect(() => {
-    fetch('/api/news?page=1')
+    setLoading(true)
+    setArticles([])
+    setPage(1)
+    fetch(`/api/news?page=1&source=${source}`)
       .then((r) => r.json())
       .then((data) => {
         setArticles(Array.isArray(data) ? data : [])
         setLoading(false)
       })
       .catch(() => setLoading(false))
-  }, [])
+  }, [source])
 
   async function loadMore() {
     setLoadingMore(true)
     const nextPage = page + 1
     try {
-      const res = await fetch(`/api/news?page=${nextPage}`)
+      const res = await fetch(`/api/news?page=${nextPage}&source=${source}`)
       const data = await res.json()
       if (Array.isArray(data)) {
         setArticles((prev) => [...prev, ...data])
@@ -55,6 +61,11 @@ export function NewsPanel() {
       setLoadingMore(false)
     }
   }
+
+  const SOURCES: { key: NewsSource; label: string }[] = [
+    { key: 'guardian', label: 'GUARDIAN' },
+    { key: 'newsapi', label: 'NEWSAPI' },
+  ]
 
   return (
     <div>
@@ -71,6 +82,43 @@ export function NewsPanel() {
         01 / WORLD NEWS
       </p>
 
+      {/* Source toggle */}
+      <div
+        style={{
+          display: 'flex',
+          borderBottom: '1px solid rgba(240,237,232,0.08)',
+          marginBottom: 16,
+        }}
+      >
+        {SOURCES.map(({ key, label }) => (
+          <button
+            key={key}
+            onClick={() => setSource(key)}
+            style={{
+              fontFamily: "ui-monospace, 'SF Mono', monospace",
+              fontSize: 15,
+              color: source === key ? '#F0EDE8' : '#605850',
+              background: 'none',
+              border: 'none',
+              borderBottom: source === key ? '1px solid #C8102E' : '1px solid transparent',
+              padding: '6px 14px',
+              cursor: 'pointer',
+              letterSpacing: '0.1em',
+              transition: 'color 0.12s',
+              marginBottom: -1,
+            }}
+            onMouseEnter={(e) => {
+              if (source !== key) (e.currentTarget as HTMLButtonElement).style.color = '#A09890'
+            }}
+            onMouseLeave={(e) => {
+              if (source !== key) (e.currentTarget as HTMLButtonElement).style.color = '#605850'
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       {loading ? (
         <div
           style={{
@@ -84,9 +132,13 @@ export function NewsPanel() {
         </div>
       ) : (
         <div>
-          {articles.slice(0, 10 * page).map((article, i) => {
-            const headline = article.fields?.headline ?? article.webTitle
+          {articles.slice(0, 10 * page).map((article) => {
+            const headline = article.fields?.headline ?? article.webTitle ?? ''
             const ago = timeAgo(article.webPublicationDate)
+            const sourceLabel =
+              source === 'newsapi'
+                ? (article.sectionName ?? 'NEWS').toUpperCase()
+                : 'THE GUARDIAN'
             return (
               <a
                 key={article.id}
@@ -122,7 +174,7 @@ export function NewsPanel() {
                     justifyContent: 'space-between',
                   }}
                 >
-                  <span>THE GUARDIAN</span>
+                  <span>{sourceLabel}</span>
                   <span>{ago}</span>
                 </div>
                 <p
