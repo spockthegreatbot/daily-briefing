@@ -18,17 +18,17 @@ export async function GET(request: Request) {
       if (!res.ok) return Response.json([])
       const data = await res.json()
       // Normalize to Guardian format
-      const articles = (data.articles ?? []).map((a: Record<string, string>) => ({
-        id: a.url,
-        webUrl: a.url,
-        webPublicationDate: a.publishedAt,
+      const articles = (data.articles ?? []).map((a: Record<string, unknown>) => ({
+        id: a.url as string,
+        webUrl: a.url as string,
+        webPublicationDate: a.publishedAt as string,
         fields: {
-          headline: a.title,
-          trailText: a.description,
-          thumbnail: a.urlToImage,
-          byline: a.author,
+          headline: a.title as string,
+          trailText: a.description as string,
+          thumbnail: a.urlToImage as string,
+          byline: a.author as string,
         },
-        sectionName: a.source?.name ?? '',
+        sectionName: (a.source as { name?: string } | undefined)?.name ?? '',
       }))
       return Response.json(articles)
     }
