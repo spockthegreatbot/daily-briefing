@@ -9,7 +9,7 @@ import { RefreshProvider } from './components/RefreshProvider'
 
 export const revalidate = 300
 
-export default async function Page() {
+export default function Page() {
   return (
     <RefreshProvider>
       <div className="min-h-screen bg-[var(--bg-base)] text-[var(--fg)]">
@@ -20,9 +20,12 @@ export default async function Page() {
         </Suspense>
 
         <main className="max-w-[1600px] mx-auto px-6 py-5">
-          <div className="hub-grid grid gap-7 items-start"
-            style={{ gridTemplateColumns: 'clamp(260px, 28%, 420px) minmax(0, 1fr) clamp(240px, 26%, 380px)' }}>
 
+          {/* 3-column hub */}
+          <div
+            className="grid gap-7 items-start"
+            style={{ gridTemplateColumns: 'clamp(260px, 28%, 420px) minmax(0, 1fr) clamp(240px, 26%, 380px)' }}
+          >
             {/* Col 1 — World News */}
             <NewsPanel />
 
@@ -31,19 +34,17 @@ export default async function Page() {
               <SocialTrends />
             </div>
 
-            {/* Col 3 — Crypto + Pulse */}
-            <div className="flex flex-col gap-4">
-              <Suspense fallback={<p className="font-mono text-xs text-[var(--muted)] py-5">Loading…</p>}>
-                <CryptoPanel />
-              </Suspense>
-              <PulsePanel />
-            </div>
-
+            {/* Col 3 — Crypto */}
+            <CryptoPanel />
           </div>
+
+          {/* Full-width Pulse strip */}
+          <PulsePanel />
+
         </main>
 
         <footer className="border-t border-white/[0.06] px-6 py-4 text-center font-mono text-[10px] text-[var(--muted)] tracking-widest mt-8">
-          DAILY BRIEFING · AUTO-REFRESH 5MIN · GUARDIAN · NEWSAPI · REDDIT · GOOGLE TRENDS · COINGECKO
+          DAILY BRIEFING · AUTO-REFRESH 5MIN · GUARDIAN · NEWSAPI · COINGECKO · ALTERNATIVE.ME · REDDIT · HACKERNEWS
         </footer>
       </div>
     </RefreshProvider>
