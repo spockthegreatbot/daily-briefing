@@ -3,6 +3,17 @@
 :root {
   --background: #16161A;
   --foreground: #F0EDE8;
+
+  /* Design tokens */
+  --bg-base:   #16161A;
+  --surface:   #1E1C1A;
+  --crimson:   #C8102E;
+  --gold:      #D4A017;
+
+  /* Typography tokens */
+  --fg:        #F0EDE8;
+  --muted-mid: #605850;
+  --muted:     #403830;
 }
 
 @theme inline {

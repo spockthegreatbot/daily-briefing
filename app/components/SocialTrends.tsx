@@ -1,150 +1,183 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { RedditPanel } from './RedditPanel'
 
+/* ─── Types ─────────────────────────────────────────────────── */
+type GoogleTrend = { title: string; traffic: string; articles: string[]; geo: string }
 type TwitterTrend = { rank: number; topic: string; volume?: string }
-type TikTokTrend = { rank: number; tag: string; views?: string }
-type InstagramTrend = { rank: number; tag: string }
+type TikTokTrend  = { rank: number; tag: string; views?: string }
+type InstaTrend   = { rank: number; tag: string }
 
+type TrendsData = { trends: GoogleTrend[]; region: string }
 type SocialData = {
-  twitter: { trends: TwitterTrend[] }
-  tiktok: { trends: TikTokTrend[] }
-  instagram: { trends: InstagramTrend[] }
+  twitter:   { trends: TwitterTrend[] }
+  tiktok:    { trends: TikTokTrend[]  }
+  instagram: { trends: InstaTrend[]   }
 }
 
-type Tab = 'REDDIT' | 'TWITTER' | 'TIKTOK' | 'INSTAGRAM'
-const TABS: Tab[] = ['REDDIT', 'TWITTER', 'TIKTOK', 'INSTAGRAM']
+type Tab = 'TRENDING' | 'TWITTER' | 'TIKTOK' | 'INSTAGRAM' | 'REDDIT'
+const TABS: Tab[] = ['TRENDING', 'TWITTER', 'TIKTOK', 'INSTAGRAM', 'REDDIT']
 
-function TrendRow({ rank, label, meta }: { rank: number; label: string; meta?: string }) {
+/* ─── Shared row ──────────────────────────────────────────────── */
+function TrendRow({
+  rank, label, meta, sub,
+}: { rank?: number; label: string; meta?: string; sub?: string[] }) {
   return (
-    <div className="flex items-baseline justify-between py-2 border-b border-white/5">
-      <div className="flex items-baseline gap-3">
-        <span
-          style={{ fontFamily: "ui-monospace, 'SF Mono', monospace", fontSize: 11 }}
-          className="text-[#403830] w-5 shrink-0"
-        >
-          {rank}
-        </span>
-        <span
-          style={{ fontFamily: "ui-monospace, 'SF Mono', monospace", fontSize: 15 }}
-          className="text-[#F0EDE8]"
-        >
-          {label}
-        </span>
+    <div className="py-2 border-b border-white/5">
+      <div className="flex items-baseline justify-between">
+        <div className="flex items-baseline gap-3 min-w-0">
+          {rank != null && (
+            <span className="font-mono text-xs text-[var(--muted)] w-5 shrink-0">{rank}</span>
+          )}
+          <span className="font-mono text-sm text-[var(--fg)] truncate">{label}</span>
+        </div>
+        {meta && (
+          <span className="font-mono text-xs text-[var(--muted-mid)] shrink-0 ml-3">{meta}</span>
+        )}
       </div>
-      {meta && (
-        <span
-          style={{ fontFamily: "ui-monospace, 'SF Mono', monospace", fontSize: 11 }}
-          className="text-[#605850] shrink-0 ml-3"
-        >
-          {meta}
-        </span>
+      {sub && sub.length > 0 && (
+        <div className="mt-1 pl-8 space-y-0.5">
+          {sub.map((s, i) => (
+            <p key={i} className="font-mono text-xs text-[var(--muted-mid)] leading-snug line-clamp-1">
+              {s}
+            </p>
+          ))}
+        </div>
       )}
     </div>
   )
 }
 
-function TwitterList({ trends }: { trends: TwitterTrend[] }) {
-  if (trends.length === 0) return <p style={{ fontFamily: "ui-monospace, 'SF Mono', monospace", fontSize: 15 }} className="text-[#403830] py-5">No trends available</p>
+/* ─── Google Trends panel ────────────────────────────────────── */
+function GoogleTrendsPanel() {
+  const [region, setRegion] = useState<'AU' | 'US'>('AU')
+  const [data, setData] = useState<TrendsData | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  const load = useCallback((r: 'AU' | 'US') => {
+    setLoading(true)
+    fetch(`/api/trends?region=${r}`)
+      .then(res => res.json())
+      .then((d: TrendsData) => { setData(d); setLoading(false) })
+      .catch(() => setLoading(false))
+  }, [])
+
+  useEffect(() => { load(region) }, [region, load])
+
   return (
     <div>
-      {trends.map((t) => (
+      {/* AU / US toggle */}
+      <div className="flex gap-4 mb-3">
+        {(['AU', 'US'] as const).map(r => (
+          <button
+            key={r}
+            onClick={() => setRegion(r)}
+            className={[
+              'font-mono text-xs tracking-widest uppercase transition-colors duration-100',
+              region === r
+                ? 'text-[var(--fg)] border-b border-[var(--crimson)]'
+                : 'text-[var(--muted)] hover:text-[var(--muted-mid)]',
+            ].join(' ')}
+          >
+            {r}
+          </button>
+        ))}
+      </div>
+
+      {loading && <p className="font-mono text-sm text-[var(--muted)] py-5">Loading…</p>}
+      {!loading && (!data || data.trends.length === 0) && (
+        <p className="font-mono text-sm text-[var(--muted)] py-5">No trends available</p>
+      )}
+      {!loading && data && data.trends.map((t, i) => (
+        <TrendRow
+          key={t.title}
+          rank={i + 1}
+          label={t.title}
+          meta={t.traffic || undefined}
+          sub={t.articles.length > 0 ? t.articles : undefined}
+        />
+      ))}
+    </div>
+  )
+}
+
+/* ─── Twitter panel ──────────────────────────────────────────── */
+function TwitterPanel({ trends }: { trends: TwitterTrend[] }) {
+  if (trends.length === 0)
+    return <p className="font-mono text-sm text-[var(--muted)] py-5">No data — scraper updates every 30min</p>
+  return (
+    <div>
+      {trends.map(t => (
         <TrendRow key={t.rank} rank={t.rank} label={t.topic} meta={t.volume || undefined} />
       ))}
     </div>
   )
 }
 
-function TikTokList({ trends }: { trends: TikTokTrend[] }) {
-  if (trends.length === 0) return <p style={{ fontFamily: "ui-monospace, 'SF Mono', monospace", fontSize: 15 }} className="text-[#403830] py-5">No trends available</p>
+/* ─── TikTok panel ───────────────────────────────────────────── */
+function TikTokPanel({ trends }: { trends: TikTokTrend[] }) {
+  if (trends.length === 0)
+    return <p className="font-mono text-sm text-[var(--muted)] py-5">No data — scraper updates every 30min</p>
   return (
     <div>
-      {trends.map((t) => (
+      {trends.map(t => (
         <TrendRow key={t.rank} rank={t.rank} label={t.tag} meta={t.views || undefined} />
       ))}
     </div>
   )
 }
 
-function InstagramList({ trends }: { trends: InstagramTrend[] }) {
-  if (trends.length === 0) return <p style={{ fontFamily: "ui-monospace, 'SF Mono', monospace", fontSize: 15 }} className="text-[#403830] py-5">No trends available</p>
+/* ─── Instagram panel ────────────────────────────────────────── */
+function InstaPanel({ trends }: { trends: InstaTrend[] }) {
+  if (trends.length === 0)
+    return <p className="font-mono text-sm text-[var(--muted)] py-5">No data — scraper updates every 30min</p>
   return (
     <div>
-      {trends.map((t) => (
+      {trends.map(t => (
         <TrendRow key={t.rank} rank={t.rank} label={t.tag} />
       ))}
     </div>
   )
 }
 
+/* ─── Main component ─────────────────────────────────────────── */
 export function SocialTrends() {
-  const [active, setActive] = useState<Tab>('REDDIT')
-  const [data, setData] = useState<SocialData | null>(null)
+  const [active, setActive]   = useState<Tab>('TRENDING')
+  const [social, setSocial]   = useState<SocialData | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    function fetchData() {
+    function fetchSocial() {
       fetch('/api/social')
-        .then((r) => r.json())
-        .then((d: SocialData) => {
-          setData(d)
-          setLoading(false)
-        })
+        .then(r => r.json())
+        .then((d: SocialData) => { setSocial(d); setLoading(false) })
         .catch(() => setLoading(false))
     }
-    fetchData()
-    const id = setInterval(fetchData, 5 * 60 * 1000)
+    fetchSocial()
+    const id = setInterval(fetchSocial, 5 * 60 * 1000)
     return () => clearInterval(id)
   }, [])
 
   return (
     <div>
-      <p
-        style={{
-          fontFamily: "ui-monospace, 'SF Mono', monospace",
-          fontSize: 12,
-          color: '#605850',
-          letterSpacing: '0.18em',
-          textTransform: 'uppercase',
-          marginBottom: 12,
-        }}
-      >
+      <p className="font-mono text-xs tracking-[0.18em] uppercase text-[var(--muted)] mb-3">
         02 / SOCIAL TRENDS
       </p>
 
       {/* Tab bar */}
-      <div
-        style={{
-          display: 'flex',
-          borderBottom: '1px solid rgba(240,237,232,0.08)',
-          marginBottom: 16,
-        }}
-      >
-        {TABS.map((tab) => (
+      <div className="flex border-b border-white/[0.08] mb-4 gap-1">
+        {TABS.map(tab => (
           <button
             key={tab}
             onClick={() => setActive(tab)}
-            style={{
-              fontFamily: "ui-monospace, 'SF Mono', monospace",
-              fontSize: 15,
-              color: active === tab ? '#F0EDE8' : '#605850',
-              background: 'none',
-              border: 'none',
-              borderBottom: active === tab ? '1px solid #C8102E' : '1px solid transparent',
-              padding: '6px 14px',
-              cursor: 'pointer',
-              letterSpacing: '0.1em',
-              transition: 'color 0.12s',
-              marginBottom: -1,
-            }}
-            onMouseEnter={(e) => {
-              if (active !== tab) (e.currentTarget as HTMLButtonElement).style.color = '#A09890'
-            }}
-            onMouseLeave={(e) => {
-              if (active !== tab) (e.currentTarget as HTMLButtonElement).style.color = '#605850'
-            }}
+            className={[
+              'font-mono text-xs tracking-widest uppercase px-3 py-1.5 -mb-px transition-colors duration-100',
+              active === tab
+                ? 'text-[var(--fg)] border-b border-[var(--crimson)]'
+                : 'text-[var(--muted)] hover:text-[var(--muted-mid)]',
+            ].join(' ')}
           >
             {tab}
           </button>
@@ -158,23 +191,19 @@ export function SocialTrends() {
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -6 }}
-          transition={{ duration: 0.15 }}
+          transition={{ duration: 0.15, ease: 'easeOut' }}
         >
-          {active === 'REDDIT' && <RedditPanel />}
-          {active !== 'REDDIT' && loading && (
-            <p style={{ fontFamily: "ui-monospace, 'SF Mono', monospace", fontSize: 15 }} className="text-[#403830] py-5">
-              Loading...
-            </p>
-          )}
-          {active === 'TWITTER' && !loading && (
-            <TwitterList trends={data?.twitter?.trends ?? []} />
-          )}
-          {active === 'TIKTOK' && !loading && (
-            <TikTokList trends={data?.tiktok?.trends ?? []} />
-          )}
-          {active === 'INSTAGRAM' && !loading && (
-            <InstagramList trends={data?.instagram?.trends ?? []} />
-          )}
+          {active === 'TRENDING'  && <GoogleTrendsPanel />}
+          {active === 'TWITTER'   && (loading
+            ? <p className="font-mono text-sm text-[var(--muted)] py-5">Loading…</p>
+            : <TwitterPanel  trends={social?.twitter?.trends ?? []} />)}
+          {active === 'TIKTOK'    && (loading
+            ? <p className="font-mono text-sm text-[var(--muted)] py-5">Loading…</p>
+            : <TikTokPanel   trends={social?.tiktok?.trends ?? []} />)}
+          {active === 'INSTAGRAM' && (loading
+            ? <p className="font-mono text-sm text-[var(--muted)] py-5">Loading…</p>
+            : <InstaPanel    trends={social?.instagram?.trends ?? []} />)}
+          {active === 'REDDIT'    && <RedditPanel />}
         </motion.div>
       </AnimatePresence>
     </div>
