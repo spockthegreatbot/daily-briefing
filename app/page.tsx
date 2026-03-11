@@ -40,7 +40,7 @@ export default async function Page() {
             style={{
               display: 'grid',
               gridTemplateColumns: 'clamp(280px, 32%, 480px) 1fr clamp(260px, 30%, 420px)',
-              gap: 16,
+              gap: 28,
               alignItems: 'start',
             }}
           >
@@ -73,7 +73,7 @@ export default async function Page() {
             marginTop: 32,
           }}
         >
-          縁人 ENJIN INTELLIGENCE · Refreshes every 5 min · Guardian + Reddit + CoinGecko
+          Daily Briefing · Refreshes every 5 min · Guardian + Reddit + CoinGecko
         </footer>
       </div>
     </RefreshProvider>

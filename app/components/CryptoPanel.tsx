@@ -90,7 +90,7 @@ export async function CryptoPanel() {
       <p
         style={{
           fontFamily: "ui-monospace, 'SF Mono', monospace",
-          fontSize: 10,
+          fontSize: 12,
           color: '#605850',
           letterSpacing: '0.18em',
           textTransform: 'uppercase',
@@ -128,7 +128,7 @@ export async function CryptoPanel() {
                 <span
                   style={{
                     fontFamily: "ui-monospace, 'SF Mono', monospace",
-                    fontSize: 13,
+                    fontSize: 15,
                     fontWeight: 700,
                     color: '#F0EDE8',
                     minWidth: 36,
@@ -150,7 +150,7 @@ export async function CryptoPanel() {
                 <span
                   style={{
                     fontFamily: "ui-monospace, 'SF Mono', monospace",
-                    fontSize: 11,
+                    fontSize: 15,
                     color: isUp ? '#22c55e' : '#ef4444',
                   }}
                 >
@@ -176,7 +176,7 @@ export async function CryptoPanel() {
         <p
           style={{
             fontFamily: "ui-monospace, 'SF Mono', monospace",
-            fontSize: 9,
+            fontSize: 15,
             color: '#605850',
             letterSpacing: '0.14em',
             textTransform: 'uppercase',
@@ -189,7 +189,7 @@ export async function CryptoPanel() {
           <p
             style={{
               fontFamily: "ui-monospace, 'SF Mono', monospace",
-              fontSize: 11,
+              fontSize: 15,
               color: '#403830',
             }}
           >
@@ -215,7 +215,7 @@ export async function CryptoPanel() {
                     <span
                       style={{
                         fontFamily: "ui-monospace, 'SF Mono', monospace",
-                        fontSize: 10,
+                        fontSize: 12,
                         color: '#605850',
                         minWidth: 18,
                       }}
@@ -234,7 +234,7 @@ export async function CryptoPanel() {
                     </span>
                     <span
                       style={{
-                        fontSize: 11,
+                        fontSize: 15,
                         color: '#605850',
                       }}
                     >
@@ -244,7 +244,7 @@ export async function CryptoPanel() {
                   <span
                     style={{
                       fontFamily: "ui-monospace, 'SF Mono', monospace",
-                      fontSize: 11,
+                      fontSize: 15,
                       fontWeight: 700,
                       color: isUp ? '#22c55e' : '#ef4444',
                     }}

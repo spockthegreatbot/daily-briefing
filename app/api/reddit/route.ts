@@ -3,7 +3,7 @@ export const revalidate = 300
 export async function GET() {
   try {
     const res = await fetch('https://www.reddit.com/r/all.json?limit=15&t=day', {
-      headers: { 'User-Agent': 'EnjinDashboard/1.0' },
+      headers: { 'User-Agent': 'DailyBriefing/1.0' },
       next: { revalidate: 300 },
     })
     if (!res.ok) return Response.json([])

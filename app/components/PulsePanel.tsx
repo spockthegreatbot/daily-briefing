@@ -97,7 +97,7 @@ export function PulsePanel() {
       <p
         style={{
           fontFamily: "ui-monospace, 'SF Mono', monospace",
-          fontSize: 10,
+          fontSize: 12,
           color: '#605850',
           letterSpacing: '0.18em',
           textTransform: 'uppercase',
@@ -127,7 +127,7 @@ export function PulsePanel() {
               <p
                 style={{
                   fontFamily: "ui-monospace, 'SF Mono', monospace",
-                  fontSize: 9,
+                  fontSize: 15,
                   color: '#605850',
                   letterSpacing: '0.12em',
                   textTransform: 'uppercase',
@@ -180,7 +180,7 @@ export function PulsePanel() {
         <p
           style={{
             fontFamily: "ui-monospace, 'SF Mono', monospace",
-            fontSize: 9,
+            fontSize: 15,
             color: '#605850',
             letterSpacing: '0.12em',
             textTransform: 'uppercase',

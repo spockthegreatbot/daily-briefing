@@ -63,7 +63,7 @@ export function Header() {
           textTransform: 'uppercase',
         }}
       >
-        縁人 ENJIN / INTELLIGENCE
+        DAILY BRIEFING
       </span>
 
       {/* Centre */}

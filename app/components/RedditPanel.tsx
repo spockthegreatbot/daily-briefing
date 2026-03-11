@@ -35,7 +35,7 @@ export function RedditPanel() {
       <div
         style={{
           fontFamily: "ui-monospace, 'SF Mono', monospace",
-          fontSize: 11,
+          fontSize: 15,
           color: '#403830',
           padding: '20px 0',
         }}
@@ -51,7 +51,7 @@ export function RedditPanel() {
         <div
           style={{
             fontFamily: "ui-monospace, 'SF Mono', monospace",
-            fontSize: 11,
+            fontSize: 15,
             color: '#403830',
             padding: '20px 0',
           }}
@@ -81,7 +81,7 @@ export function RedditPanel() {
               <span
                 style={{
                   fontFamily: "ui-monospace, 'SF Mono', monospace",
-                  fontSize: 11,
+                  fontSize: 15,
                   color: '#605850',
                   minWidth: 20,
                   paddingTop: 1,
@@ -95,7 +95,7 @@ export function RedditPanel() {
                 <span
                   style={{
                     fontFamily: "ui-monospace, 'SF Mono', monospace",
-                    fontSize: 10,
+                    fontSize: 12,
                     color: '#C8102E',
                     display: 'block',
                     marginBottom: 3,
@@ -107,7 +107,7 @@ export function RedditPanel() {
                 {/* Title */}
                 <p
                   style={{
-                    fontSize: 13,
+                    fontSize: 15,
                     color: '#A09890',
                     lineHeight: 1.4,
                     margin: 0,
@@ -131,7 +131,7 @@ export function RedditPanel() {
                   <span
                     style={{
                       fontFamily: "ui-monospace, 'SF Mono', monospace",
-                      fontSize: 10,
+                      fontSize: 12,
                       color: '#D4A017',
                     }}
                   >
@@ -140,7 +140,7 @@ export function RedditPanel() {
                   <span
                     style={{
                       fontFamily: "ui-monospace, 'SF Mono', monospace",
-                      fontSize: 10,
+                      fontSize: 12,
                       color: '#605850',
                     }}
                   >

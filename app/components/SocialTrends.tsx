@@ -16,7 +16,7 @@ export function SocialTrends() {
       <p
         style={{
           fontFamily: "ui-monospace, 'SF Mono', monospace",
-          fontSize: 10,
+          fontSize: 12,
           color: '#605850',
           letterSpacing: '0.18em',
           textTransform: 'uppercase',
@@ -41,7 +41,7 @@ export function SocialTrends() {
             onClick={() => setActive(tab)}
             style={{
               fontFamily: "ui-monospace, 'SF Mono', monospace",
-              fontSize: 11,
+              fontSize: 15,
               color: active === tab ? '#F0EDE8' : '#605850',
               background: 'none',
               border: 'none',

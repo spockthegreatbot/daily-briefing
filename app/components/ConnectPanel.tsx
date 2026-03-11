@@ -23,7 +23,7 @@ export function ConnectPanel({ sectionNum, title, envKey, note }: ConnectPanelPr
       <span
         style={{
           fontFamily: "ui-monospace, 'SF Mono', monospace",
-          fontSize: 9,
+          fontSize: 15,
           letterSpacing: '0.15em',
           color: '#605850',
           textTransform: 'uppercase',
@@ -38,7 +38,7 @@ export function ConnectPanel({ sectionNum, title, envKey, note }: ConnectPanelPr
           alignItems: 'center',
           gap: 6,
           fontFamily: "ui-monospace, 'SF Mono', monospace",
-          fontSize: 10,
+          fontSize: 12,
           color: '#605850',
           border: '1px solid rgba(240,237,232,0.08)',
           padding: '3px 8px',
@@ -52,7 +52,7 @@ export function ConnectPanel({ sectionNum, title, envKey, note }: ConnectPanelPr
       <p
         style={{
           fontFamily: "ui-monospace, 'SF Mono', monospace",
-          fontSize: 11,
+          fontSize: 15,
           color: '#605850',
           marginTop: 8,
         }}
@@ -62,7 +62,7 @@ export function ConnectPanel({ sectionNum, title, envKey, note }: ConnectPanelPr
       <p
         style={{
           fontFamily: "ui-monospace, 'SF Mono', monospace",
-          fontSize: 10,
+          fontSize: 12,
           color: '#403830',
           background: 'rgba(240,237,232,0.03)',
           padding: '4px 10px',
@@ -74,7 +74,7 @@ export function ConnectPanel({ sectionNum, title, envKey, note }: ConnectPanelPr
       <p
         style={{
           fontFamily: "ui-monospace, 'SF Mono', monospace",
-          fontSize: 10,
+          fontSize: 12,
           color: '#403830',
           marginTop: 4,
           maxWidth: 240,

@@ -8,7 +8,7 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'Enjin Intelligence · Micro News Hub',
+  title: 'Daily Briefing · Micro News Hub',
   description: 'Daily market intelligence dashboard — world news, crypto, social trends',
 }
 
