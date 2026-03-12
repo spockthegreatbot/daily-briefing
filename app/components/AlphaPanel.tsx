@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -25,6 +25,7 @@ type DexToken = {
   boosted?: boolean
   amount?: number
   totalAmount?: number
+  pairCreatedAt?: number
 }
 
 type RedditPost = {
@@ -33,6 +34,7 @@ type RedditPost = {
   score: number
   comments: number
   url: string
+  created_utc: number
 }
 
 type ChanThread = {
@@ -41,19 +43,33 @@ type ChanThread = {
   replies: number
   images: number
   url: string
+  time?: number
 }
 
-type Tab = 'LAUNCHES' | 'TRENDING' | 'REDDIT' | 'DEX' | '4CHAN'
+type GeckoPool = {
+  id: string
+  attributes: {
+    name: string
+    reserve_in_usd?: string | null
+    pool_created_at?: string | null
+  }
+  relationships?: {
+    dex?: { data?: { id?: string } }
+  }
+}
+
+type Correlation = { term: string; sources: string[] }
+
+type Tab = 'LAUNCHES' | 'TRENDING' | 'REDDIT' | 'DEX' | '4CHAN' | 'POOLS'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function timeAgo(ts: number): string {
-  const diffMs = Date.now() - (ts < 1e12 ? ts * 1000 : ts)
-  const mins = Math.floor(diffMs / 60000)
-  if (mins < 60) return `${mins}m`
-  const hrs = Math.floor(mins / 60)
-  if (hrs < 24) return `${hrs}h`
-  return `${Math.floor(hrs / 24)}d`
+  const diff = (Date.now() - (ts < 1e12 ? ts * 1000 : ts)) / 1000
+  if (diff < 60)    return `${Math.floor(diff)}s ago`
+  if (diff < 3600)  return `${Math.floor(diff / 60)}m ago`
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
+  return `${Math.floor(diff / 86400)}d ago`
 }
 
 function fmtMcap(n: number | undefined): string {
@@ -61,7 +77,14 @@ function fmtMcap(n: number | undefined): string {
   if (n >= 1e9) return `$${(n / 1e9).toFixed(1)}B`
   if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`
   if (n >= 1e3) return `$${(n / 1e3).toFixed(1)}K`
-  return `$${(n ?? 0).toFixed(0)}`
+  return `$${n.toFixed(0)}`
+}
+
+function fmtUsd(s: string | undefined | null): string {
+  if (!s) return '—'
+  const n = parseFloat(s)
+  if (isNaN(n)) return '—'
+  return fmtMcap(n)
 }
 
 function chainLabel(chain: string): string {
@@ -72,7 +95,49 @@ function chainLabel(chain: string): string {
   return map[chain?.toLowerCase()] ?? chain?.toUpperCase().slice(0, 4) ?? '?'
 }
 
-// ─── Badge ────────────────────────────────────────────────────────────────────
+const IGNORE_WORDS = new Set([
+  'coin','the','and','for','with','token','new','this','that','will',
+  'from','have','been','were','just','like','more','your','they','when',
+])
+
+function extractWords(text: string): string[] {
+  return text.toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(w => w.length >= 4 && !IGNORE_WORDS.has(w))
+}
+
+// ─── Shared UI primitives ─────────────────────────────────────────────────────
+
+const rowBase: React.CSSProperties = {
+  display: 'block',
+  padding: '8px 10px',
+  borderBottom: '1px solid var(--border)',
+  cursor: 'pointer',
+  transition: 'background 0.1s',
+  background: 'transparent',
+}
+
+const tsStyle: React.CSSProperties = {
+  fontFamily: "ui-monospace,'SF Mono',monospace",
+  fontSize: 9,
+  color: 'var(--muted)',
+  whiteSpace: 'nowrap',
+  flexShrink: 0,
+}
+
+function RowDiv({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <div
+      style={rowBase}
+      onClick={() => window.open(href, '_blank', 'noopener,noreferrer')}
+      onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = 'rgba(240,237,232,0.03)' }}
+      onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'transparent' }}
+    >
+      {children}
+    </div>
+  )
+}
 
 function Badge({ label, color }: { label: string; color?: string }) {
   const c = color ?? 'var(--muted)'
@@ -93,6 +158,47 @@ function Badge({ label, color }: { label: string; color?: string }) {
   )
 }
 
+function QuickLinks({ name, symbol }: { name: string; symbol: string }) {
+  return (
+    <span style={{ display: 'inline-flex', gap: 3, flexShrink: 0 }}>
+      <a
+        href={`https://twitter.com/search?q=${encodeURIComponent(name)}&f=live`}
+        target="_blank" rel="noopener noreferrer"
+        onClick={e => e.stopPropagation()}
+        style={{ fontSize: 10, textDecoration: 'none', lineHeight: 1 }}
+      >🔍</a>
+      <a
+        href={`https://dexscreener.com/search?q=${encodeURIComponent(symbol)}`}
+        target="_blank" rel="noopener noreferrer"
+        onClick={e => e.stopPropagation()}
+        style={{ fontSize: 10, textDecoration: 'none', lineHeight: 1 }}
+      >📈</a>
+      <a
+        href="https://pump.fun/"
+        target="_blank" rel="noopener noreferrer"
+        onClick={e => e.stopPropagation()}
+        style={{ fontSize: 10, textDecoration: 'none', lineHeight: 1 }}
+      >🚀</a>
+    </span>
+  )
+}
+
+function Spinner() {
+  return (
+    <p style={{ fontFamily: "ui-monospace,'SF Mono',monospace", fontSize: 11, color: 'var(--muted)', padding: '12px 10px' }}>
+      LOADING…
+    </p>
+  )
+}
+
+function Empty({ text }: { text: string }) {
+  return (
+    <p style={{ fontFamily: "ui-monospace,'SF Mono',monospace", fontSize: 11, color: 'var(--muted)', padding: '12px 10px' }}>
+      {text}
+    </p>
+  )
+}
+
 // ─── LAUNCHES tab ─────────────────────────────────────────────────────────────
 
 function LaunchesTab() {
@@ -101,7 +207,6 @@ function LaunchesTab() {
 
   const fetchLaunches = useCallback(() => {
     setLoading(true)
-    // Pump.fun — must be client-side (Vercel IPs blocked)
     const pumpUrl = 'https://frontend-api.pump.fun/coins?limit=20&sort=created_timestamp&order=DESC&includeNsfw=true'
     const fallbackUrl = 'https://client-api-2-74b1891ee9f9.herokuapp.com/coins?limit=20&sort=created_timestamp&order=DESC'
 
@@ -117,7 +222,7 @@ function LaunchesTab() {
           launchpad: 'pump.fun',
           marketCap: typeof c.usd_market_cap === 'number' ? c.usd_market_cap : undefined,
           createdAt: typeof c.created_timestamp === 'number' ? c.created_timestamp : Date.now() / 1000,
-          url: `https://pump.fun/${c.mint as string ?? ''}`,
+          url: `https://pump.fun/${(c.mint as string) ?? ''}`,
           twitter: c.twitter as string | undefined,
           description: c.description as string | undefined,
         })) as Launch[]
@@ -136,23 +241,12 @@ function LaunchesTab() {
   }, [fetchLaunches])
 
   if (loading) return <Spinner />
-
-  if (launches.length === 0) {
-    return <Empty text="No launches — pump.fun unreachable" />
-  }
+  if (launches.length === 0) return <Empty text="No launches — pump.fun unreachable" />
 
   return (
     <div>
       {launches.map((l, i) => (
-        <a
-          key={`${l.launchpad}-${l.symbol}-${i}`}
-          href={l.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          style={rowStyle}
-          onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.background = 'rgba(240,237,232,0.03)' }}
-          onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.background = 'transparent' }}
-        >
+        <RowDiv key={`${l.launchpad}-${l.symbol}-${i}`} href={l.url}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
               <span style={{ fontFamily: "ui-monospace,'SF Mono',monospace", fontSize: 12, fontWeight: 700, color: 'var(--fg)' }}>
@@ -161,9 +255,10 @@ function LaunchesTab() {
               <Badge label={chainLabel(l.chain)} color="var(--muted-mid)" />
               <Badge label={l.launchpad} color="var(--accent)" />
             </div>
-            <span style={{ fontFamily: "ui-monospace,'SF Mono',monospace", fontSize: 10, color: 'var(--muted)' }}>
-              {timeAgo(l.createdAt)}
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <span style={tsStyle}>{timeAgo(l.createdAt)}</span>
+              <QuickLinks name={l.name} symbol={l.symbol} />
+            </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: 11, color: 'var(--muted-mid)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 160 }}>
@@ -173,7 +268,7 @@ function LaunchesTab() {
               {fmtMcap(l.marketCap)}
             </span>
           </div>
-        </a>
+        </RowDiv>
       ))}
     </div>
   )
@@ -191,7 +286,6 @@ function TrendingTab() {
       .then(data => {
         const boosted = (data.boosts ?? []).slice(0, 30)
         const profiles = (data.profiles ?? []).filter((p: DexToken) => !p.boosted).slice(0, 20)
-        // Boosted first, then new profiles
         setTokens([...boosted, ...profiles])
         setLoading(false)
       })
@@ -203,36 +297,35 @@ function TrendingTab() {
 
   return (
     <div>
-      {tokens.map((t, i) => (
-        <a
-          key={`${t.chainId}-${t.tokenAddress}-${i}`}
-          href={t.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          style={rowStyle}
-          onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.background = 'rgba(240,237,232,0.03)' }}
-          onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.background = 'transparent' }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-              <Badge label={chainLabel(t.chainId)} color="var(--muted-mid)" />
-              {t.boosted && <Badge label="BOOSTED" color="var(--gold)" />}
+      {tokens.map((t, i) => {
+        const displayName = t.description?.split(' ')[0] ?? t.tokenAddress.slice(0, 8)
+        return (
+          <RowDiv key={`${t.chainId}-${t.tokenAddress}-${i}`} href={t.url}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <Badge label={chainLabel(t.chainId)} color="var(--muted-mid)" />
+                {t.boosted && <Badge label="BOOSTED" color="var(--gold)" />}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                {t.pairCreatedAt != null && <span style={tsStyle}>{timeAgo(t.pairCreatedAt)}</span>}
+                {t.totalAmount != null && (
+                  <span style={{ fontFamily: "ui-monospace,'SF Mono',monospace", fontSize: 9, color: 'var(--gold)', opacity: 0.7 }}>
+                    {(t.totalAmount ?? 0).toFixed(0)} pts
+                  </span>
+                )}
+                <QuickLinks name={displayName} symbol={displayName} />
+              </div>
             </div>
-            {t.totalAmount != null && (
-              <span style={{ fontFamily: "ui-monospace,'SF Mono',monospace", fontSize: 9, color: 'var(--gold)', opacity: 0.7 }}>
-                {(t.totalAmount ?? 0).toFixed(0)} pts
-              </span>
-            )}
-          </div>
-          <span style={{
-            fontSize: 11, color: 'var(--muted-mid)',
-            overflow: 'hidden', display: '-webkit-box',
-            WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const,
-          }}>
-            {t.description ?? t.tokenAddress.slice(0, 12) + '…'}
-          </span>
-        </a>
-      ))}
+            <span style={{
+              fontSize: 11, color: 'var(--muted-mid)',
+              overflow: 'hidden', display: '-webkit-box',
+              WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const,
+            }}>
+              {t.description ?? t.tokenAddress.slice(0, 12) + '…'}
+            </span>
+          </RowDiv>
+        )
+      })}
     </div>
   )
 }
@@ -258,6 +351,7 @@ function RedditTab() {
               score: (c.data.score as number) ?? 0,
               comments: (c.data.num_comments as number) ?? 0,
               url: `https://reddit.com${c.data.permalink as string}`,
+              created_utc: (c.data.created_utc as number) ?? 0,
             }))
           })
           .catch(() => [] as RedditPost[])
@@ -276,22 +370,18 @@ function RedditTab() {
   return (
     <div>
       {posts.map((p, i) => (
-        <a
-          key={`reddit-${i}`}
-          href={p.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          style={rowStyle}
-          onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.background = 'rgba(240,237,232,0.03)' }}
-          onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.background = 'transparent' }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+        <RowDiv key={`reddit-${i}`} href={p.url}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3, alignItems: 'center' }}>
             <span style={{ fontFamily: "ui-monospace,'SF Mono',monospace", fontSize: 9, color: 'var(--accent)', letterSpacing: '0.1em' }}>
               r/{p.subreddit}
             </span>
-            <span style={{ fontFamily: "ui-monospace,'SF Mono',monospace", fontSize: 9, color: 'var(--muted)' }}>
-              ↑{p.score >= 1000 ? `${((p.score ?? 0) / 1000).toFixed(1)}k` : p.score} · {p.comments}c
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <span style={{ fontFamily: "ui-monospace,'SF Mono',monospace", fontSize: 9, color: 'var(--muted)' }}>
+                ↑{p.score >= 1000 ? `${((p.score ?? 0) / 1000).toFixed(1)}k` : p.score} · {p.comments}c
+              </span>
+              {p.created_utc > 0 && <span style={tsStyle}>{timeAgo(p.created_utc)}</span>}
+              <QuickLinks name={p.title.slice(0, 40)} symbol={p.subreddit} />
+            </div>
           </div>
           <p style={{
             fontSize: 11, color: 'var(--fg)', margin: 0, lineHeight: 1.4,
@@ -300,7 +390,7 @@ function RedditTab() {
           }}>
             {p.title}
           </p>
-        </a>
+        </RowDiv>
       ))}
     </div>
   )
@@ -328,36 +418,35 @@ function DexTab() {
 
   return (
     <div>
-      {tokens.map((t, i) => (
-        <a
-          key={`dex-${t.chainId}-${t.tokenAddress}-${i}`}
-          href={t.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          style={rowStyle}
-          onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.background = 'rgba(240,237,232,0.03)' }}
-          onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.background = 'transparent' }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
-            <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
-              <Badge label={chainLabel(t.chainId)} color="var(--muted-mid)" />
-              {t.boosted && <Badge label="BOOSTED" color="var(--gold)" />}
+      {tokens.map((t, i) => {
+        const displayName = t.description?.split(' ')[0] ?? t.tokenAddress.slice(0, 8)
+        return (
+          <RowDiv key={`dex-${t.chainId}-${t.tokenAddress}-${i}`} href={t.url}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
+              <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
+                <Badge label={chainLabel(t.chainId)} color="var(--muted-mid)" />
+                {t.boosted && <Badge label="BOOSTED" color="var(--gold)" />}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                {t.pairCreatedAt != null && <span style={tsStyle}>{timeAgo(t.pairCreatedAt)}</span>}
+                <span style={{ fontFamily: "ui-monospace,'SF Mono',monospace", fontSize: 9, color: 'var(--muted)', maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {t.tokenAddress.slice(0, 8)}…
+                </span>
+                <QuickLinks name={displayName} symbol={displayName} />
+              </div>
             </div>
-            <span style={{ fontFamily: "ui-monospace,'SF Mono',monospace", fontSize: 9, color: 'var(--muted)', maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {t.tokenAddress.slice(0, 8)}…
-            </span>
-          </div>
-          {t.description && (
-            <p style={{
-              fontSize: 11, color: 'var(--muted-mid)', margin: 0, lineHeight: 1.4,
-              overflow: 'hidden', display: '-webkit-box',
-              WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const,
-            }}>
-              {t.description}
-            </p>
-          )}
-        </a>
-      ))}
+            {t.description && (
+              <p style={{
+                fontSize: 11, color: 'var(--muted-mid)', margin: 0, lineHeight: 1.4,
+                overflow: 'hidden', display: '-webkit-box',
+                WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const,
+              }}>
+                {t.description}
+              </p>
+            )}
+          </RowDiv>
+        )
+      })}
     </div>
   )
 }
@@ -384,22 +473,21 @@ function FourChanTab() {
   return (
     <div>
       {threads.map((t, i) => (
-        <a
-          key={`chan-${t.id}`}
-          href={t.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          style={rowStyle}
-          onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.background = 'rgba(240,237,232,0.03)' }}
-          onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.background = 'transparent' }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+        <RowDiv key={`chan-${t.id}`} href={t.url}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3, alignItems: 'center' }}>
             <span style={{ fontFamily: "ui-monospace,'SF Mono',monospace", fontSize: 9, color: 'var(--muted)', letterSpacing: '0.1em' }}>
               /BIZ/ #{i + 1}
             </span>
-            <span style={{ fontFamily: "ui-monospace,'SF Mono',monospace", fontSize: 9, color: 'var(--muted)' }}>
-              {t.replies}↩ · {t.images}🖼
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <span style={{ fontFamily: "ui-monospace,'SF Mono',monospace", fontSize: 9, color: 'var(--muted)' }}>
+                {t.replies}↩ · {t.images}🖼
+              </span>
+              {t.time != null && t.time > 0 && <span style={tsStyle}>{timeAgo(t.time)}</span>}
+              <QuickLinks
+                name={t.title.slice(0, 40)}
+                symbol={t.title.split(/\s+/)[0]?.slice(0, 8) ?? 'BIZ'}
+              />
+            </div>
           </div>
           <p style={{
             fontSize: 11, color: 'var(--fg)', margin: 0, lineHeight: 1.4,
@@ -408,37 +496,136 @@ function FourChanTab() {
           }}>
             {t.title}
           </p>
-        </a>
+        </RowDiv>
       ))}
     </div>
   )
 }
 
-// ─── Shared UI primitives ─────────────────────────────────────────────────────
+// ─── POOLS tab (GeckoTerminal) ────────────────────────────────────────────────
 
-const rowStyle: React.CSSProperties = {
-  display: 'block',
-  padding: '8px 10px',
-  borderBottom: '1px solid var(--border)',
-  textDecoration: 'none',
-  cursor: 'pointer',
-  transition: 'background 0.1s',
-  background: 'transparent',
-}
-
-function Spinner() {
+function PoolChainSection({ pools, network }: { pools: GeckoPool[]; network: string }) {
+  if (pools.length === 0) return <Empty text={`No ${network} pools`} />
   return (
-    <p style={{ fontFamily: "ui-monospace,'SF Mono',monospace", fontSize: 11, color: 'var(--muted)', padding: '12px 10px' }}>
-      LOADING…
-    </p>
+    <div>
+      <div style={{
+        fontFamily: "ui-monospace,'SF Mono',monospace",
+        fontSize: 9,
+        color: 'var(--muted)',
+        letterSpacing: '0.14em',
+        padding: '5px 10px 4px',
+        borderBottom: '1px solid var(--border)',
+        textTransform: 'uppercase' as const,
+        background: 'rgba(240,237,232,0.02)',
+      }}>
+        ◈ {network}
+      </div>
+      {pools.map(pool => {
+        const underscore = pool.id.indexOf('_')
+        const addr = underscore >= 0 ? pool.id.slice(underscore + 1) : pool.id
+        const dexName = pool.relationships?.dex?.data?.id ?? '—'
+        const reserve = fmtUsd(pool.attributes.reserve_in_usd)
+        const created = pool.attributes.pool_created_at
+        const poolUrl = `https://www.geckoterminal.com/${network.toLowerCase()}/pools/${addr}`
+        const createdTs = created ? new Date(created).getTime() : 0
+
+        return (
+          <RowDiv key={pool.id} href={poolUrl}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+              <span style={{
+                fontFamily: "ui-monospace,'SF Mono',monospace",
+                fontSize: 12, fontWeight: 700, color: 'var(--fg)',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 150,
+              }}>
+                {pool.attributes.name}
+              </span>
+              {createdTs > 0 && <span style={tsStyle}>{timeAgo(createdTs)}</span>}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontFamily: "ui-monospace,'SF Mono',monospace", fontSize: 10, color: 'var(--muted-mid)' }}>
+                {dexName}
+              </span>
+              <span style={{ fontFamily: "ui-monospace,'SF Mono',monospace", fontSize: 10, color: 'var(--muted)' }}>
+                LIQ {reserve}
+              </span>
+            </div>
+          </RowDiv>
+        )
+      })}
+    </div>
   )
 }
 
-function Empty({ text }: { text: string }) {
+function PoolsTab() {
+  const [solPools, setSolPools]   = useState<GeckoPool[]>([])
+  const [basePools, setBasePools] = useState<GeckoPool[]>([])
+  const [loading, setLoading]     = useState(true)
+  const [unavail, setUnavail]     = useState(false)
+
+  const fetchPools = useCallback(() => {
+    Promise.all([
+      fetch('https://api.geckoterminal.com/api/v2/networks/solana/new_pools?page=1', { headers: { Accept: 'application/json' } })
+        .then(r => r.ok ? r.json() : null).catch(() => null),
+      fetch('https://api.geckoterminal.com/api/v2/networks/base/new_pools?page=1', { headers: { Accept: 'application/json' } })
+        .then(r => r.ok ? r.json() : null).catch(() => null),
+    ]).then(([sol, base]) => {
+      if (!sol && !base) { setUnavail(true); setLoading(false); return }
+      setSolPools(sol?.data?.slice(0, 15) ?? [])
+      setBasePools(base?.data?.slice(0, 10) ?? [])
+      setLoading(false)
+    })
+  }, [])
+
+  useEffect(() => {
+    fetchPools()
+    const id = setInterval(fetchPools, 60000)
+    return () => clearInterval(id)
+  }, [fetchPools])
+
+  if (loading) return <Spinner />
+  if (unavail)  return <Empty text="UNAVAILABLE — GeckoTerminal unreachable" />
+
   return (
-    <p style={{ fontFamily: "ui-monospace,'SF Mono',monospace", fontSize: 11, color: 'var(--muted)', padding: '12px 10px' }}>
-      {text}
-    </p>
+    <div>
+      <PoolChainSection pools={solPools} network="SOLANA" />
+      <PoolChainSection pools={basePools} network="BASE" />
+    </div>
+  )
+}
+
+// ─── Correlation Banner ────────────────────────────────────────────────────────
+
+function CorrelationBanner({ correlations }: { correlations: Correlation[] }) {
+  if (correlations.length === 0) return null
+  return (
+    <div style={{
+      backgroundColor: 'var(--accent)',
+      color: '#fff',
+      fontFamily: "ui-monospace,'SF Mono',monospace",
+      fontSize: 10,
+      padding: '5px 10px',
+      letterSpacing: '0.08em',
+      display: 'flex',
+      flexDirection: 'column' as const,
+      gap: 4,
+    }}>
+      {correlations.slice(0, 5).map(c => (
+        <div key={c.term} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>
+            🚨 CORRELATION: &ldquo;{c.term.toUpperCase()}&rdquo; appears in {c.sources.join(' + ')}
+          </span>
+          <a
+            href={`https://twitter.com/search?q=${encodeURIComponent(c.term)}&f=live`}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={e => e.stopPropagation()}
+            style={{ color: '#fff', textDecoration: 'underline', fontSize: 9, whiteSpace: 'nowrap' as const, flexShrink: 0 }}
+          >
+            [view →]
+          </a>
+        </div>
+      ))}
+    </div>
   )
 }
 
@@ -450,10 +637,87 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'REDDIT',   label: 'REDDIT'   },
   { key: 'DEX',      label: 'DEX'      },
   { key: '4CHAN',    label: '4CHAN'     },
+  { key: 'POOLS',    label: 'POOLS'    },
 ]
 
 export function AlphaPanel() {
   const [tab, setTab] = useState<Tab>('LAUNCHES')
+
+  // Correlation state — fetched independently of tab display
+  const [launchNames,  setLaunchNames]  = useState<string[]>([])
+  const [redditTitles, setRedditTitles] = useState<string[]>([])
+  const [hnTitles,     setHnTitles]     = useState<string[]>([])
+  const [socialTerms,  setSocialTerms]  = useState<string[]>([])
+
+  useEffect(() => {
+    // Pump.fun launches for correlation
+    const pumpUrl = 'https://frontend-api.pump.fun/coins?limit=20&sort=created_timestamp&order=DESC&includeNsfw=true'
+    fetch(pumpUrl)
+      .then(r => r.ok ? r.json() : [])
+      .catch(() => [])
+      .then((coins: Record<string, unknown>[]) => {
+        if (Array.isArray(coins)) setLaunchNames(coins.map(c => (c.name as string) ?? ''))
+      })
+
+    // Reddit titles for correlation
+    Promise.all(
+      ['CryptoCurrency', 'SatoshiStreetBets', 'memecoins', 'solana'].map(sub =>
+        fetch(`https://www.reddit.com/r/${sub}.json?limit=10&t=day`)
+          .then(r => r.ok ? r.json() : null)
+          .catch(() => null)
+      )
+    ).then(results => {
+      const titles = results.flatMap(data =>
+        data?.data?.children?.map((c: { data: { title: string } }) => c.data.title as string) ?? []
+      )
+      setRedditTitles(titles)
+    })
+
+    // HN trends for correlation
+    fetch('/api/trends')
+      .then(r => r.ok ? r.json() : [])
+      .then((data: { title?: string }[]) => {
+        if (Array.isArray(data)) setHnTitles(data.map(h => h.title ?? ''))
+      })
+      .catch(() => {})
+
+    // Social/Twitter trends for correlation
+    fetch('/api/social')
+      .then(r => r.ok ? r.json() : {})
+      .then((data: { twitter?: { trends?: Array<{ name?: string; topic?: string }> } }) => {
+        const trends = data.twitter?.trends ?? []
+        setSocialTerms(trends.map(t => t.name ?? t.topic ?? ''))
+      })
+      .catch(() => {})
+  }, [])
+
+  // Compute correlations when any source data changes
+  const correlations = useMemo<Correlation[]>(() => {
+    if (launchNames.length === 0) return []
+
+    const redditWords = new Set(redditTitles.flatMap(extractWords))
+    const hnWords     = new Set(hnTitles.flatMap(extractWords))
+    const socialWords = new Set(socialTerms.flatMap(extractWords))
+
+    const found: Correlation[] = []
+    const seen  = new Set<string>()
+
+    for (const name of launchNames) {
+      for (const word of extractWords(name)) {
+        if (seen.has(word)) continue
+        const sources: string[] = []
+        if (redditWords.has(word)) sources.push('REDDIT')
+        if (hnWords.has(word))     sources.push('VIRAL')
+        if (socialWords.has(word)) sources.push('TWITTER')
+        if (sources.length > 0) {
+          found.push({ term: word, sources: ['LAUNCHES', ...sources] })
+          seen.add(word)
+        }
+      }
+    }
+
+    return found.slice(0, 10)
+  }, [launchNames, redditTitles, hnTitles, socialTerms])
 
   return (
     <div>
@@ -468,6 +732,9 @@ export function AlphaPanel() {
       }}>
         04 / ALPHA
       </p>
+
+      {/* Correlation banner — shown above tabs */}
+      <CorrelationBanner correlations={correlations} />
 
       {/* Tab bar */}
       <div style={{
@@ -487,7 +754,7 @@ export function AlphaPanel() {
               background: 'none',
               border: 'none',
               borderBottom: tab === key ? '1px solid var(--accent)' : '1px solid transparent',
-              padding: '6px 10px',
+              padding: '6px 8px',
               cursor: 'pointer',
               letterSpacing: '0.1em',
               marginBottom: -1,
@@ -513,6 +780,7 @@ export function AlphaPanel() {
         {tab === 'REDDIT'   && <RedditTab />}
         {tab === 'DEX'      && <DexTab />}
         {tab === '4CHAN'    && <FourChanTab />}
+        {tab === 'POOLS'    && <PoolsTab />}
       </div>
     </div>
   )

@@ -6,6 +6,7 @@ type ChanThread = {
   com?: string
   replies: number
   images: number
+  time: number
   semantic_url?: string
 }
 
@@ -33,6 +34,7 @@ export async function GET() {
         title: t.sub ?? stripHtml(t.com ?? '').slice(0, 120),
         replies: t.replies,
         images: t.images,
+        time: t.time,
         url: `https://boards.4channel.org/biz/thread/${t.no}`,
       }))
 
