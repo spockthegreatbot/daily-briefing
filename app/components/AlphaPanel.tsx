@@ -4,18 +4,6 @@ import { useEffect, useState, useCallback, useMemo } from 'react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Launch = {
-  name: string
-  symbol: string
-  chain: string
-  launchpad: string
-  marketCap?: number
-  createdAt: number
-  url: string
-  twitter?: string
-  description?: string
-}
-
 type DexToken = {
   url: string
   chainId: string
@@ -60,7 +48,7 @@ type GeckoPool = {
 
 type Correlation = { term: string; sources: string[] }
 
-type Tab = 'LAUNCHES' | 'TRENDING' | 'REDDIT' | 'DEX' | '4CHAN' | 'POOLS'
+type Tab = 'TRENDING' | 'REDDIT' | '4CHAN' | 'POOLS'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -72,19 +60,14 @@ function timeAgo(ts: number): string {
   return `${Math.floor(diff / 86400)}d ago`
 }
 
-function fmtMcap(n: number | undefined): string {
-  if (n == null) return '—'
-  if (n >= 1e9) return `$${(n / 1e9).toFixed(1)}B`
-  if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`
-  if (n >= 1e3) return `$${(n / 1e3).toFixed(1)}K`
-  return `$${n.toFixed(0)}`
-}
-
 function fmtUsd(s: string | undefined | null): string {
   if (!s) return '—'
   const n = parseFloat(s)
   if (isNaN(n)) return '—'
-  return fmtMcap(n)
+  if (n >= 1e9) return `$${(n / 1e9).toFixed(1)}B`
+  if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`
+  if (n >= 1e3) return `$${(n / 1e3).toFixed(1)}K`
+  return `$${n.toFixed(0)}`
 }
 
 function chainLabel(chain: string): string {
@@ -98,6 +81,7 @@ function chainLabel(chain: string): string {
 const IGNORE_WORDS = new Set([
   'coin','the','and','for','with','token','new','this','that','will',
   'from','have','been','were','just','like','more','your','they','when',
+  'crypto','market','price','bitcoin','ethereum','about','what','some',
 ])
 
 function extractWords(text: string): string[] {
@@ -173,12 +157,6 @@ function QuickLinks({ name, symbol }: { name: string; symbol: string }) {
         onClick={e => e.stopPropagation()}
         style={{ fontSize: 10, textDecoration: 'none', lineHeight: 1 }}
       >📈</a>
-      <a
-        href="https://pump.fun/"
-        target="_blank" rel="noopener noreferrer"
-        onClick={e => e.stopPropagation()}
-        style={{ fontSize: 10, textDecoration: 'none', lineHeight: 1 }}
-      >🚀</a>
     </span>
   )
 }
@@ -199,81 +177,6 @@ function Empty({ text }: { text: string }) {
   )
 }
 
-// ─── LAUNCHES tab ─────────────────────────────────────────────────────────────
-
-function LaunchesTab() {
-  const [launches, setLaunches] = useState<Launch[]>([])
-  const [loading, setLoading] = useState(true)
-
-  const fetchLaunches = useCallback(() => {
-    setLoading(true)
-    const pumpUrl = 'https://frontend-api.pump.fun/coins?limit=20&sort=created_timestamp&order=DESC&includeNsfw=true'
-    const fallbackUrl = 'https://client-api-2-74b1891ee9f9.herokuapp.com/coins?limit=20&sort=created_timestamp&order=DESC'
-
-    fetch(pumpUrl)
-      .then(r => r.ok ? r.json() : Promise.reject('404'))
-      .catch(() => fetch(fallbackUrl).then(r => r.ok ? r.json() : []))
-      .then((coins: Record<string, unknown>[]) => {
-        if (!Array.isArray(coins)) return []
-        return coins.map(c => ({
-          name: (c.name as string) ?? 'Unknown',
-          symbol: (c.symbol as string) ?? '?',
-          chain: 'solana',
-          launchpad: 'pump.fun',
-          marketCap: typeof c.usd_market_cap === 'number' ? c.usd_market_cap : undefined,
-          createdAt: typeof c.created_timestamp === 'number' ? c.created_timestamp : Date.now() / 1000,
-          url: `https://pump.fun/${(c.mint as string) ?? ''}`,
-          twitter: c.twitter as string | undefined,
-          description: c.description as string | undefined,
-        })) as Launch[]
-      })
-      .catch(() => [] as Launch[])
-      .then(coins => {
-        setLaunches(coins)
-        setLoading(false)
-      })
-  }, [])
-
-  useEffect(() => {
-    fetchLaunches()
-    const id = setInterval(fetchLaunches, 60000)
-    return () => clearInterval(id)
-  }, [fetchLaunches])
-
-  if (loading) return <Spinner />
-  if (launches.length === 0) return <Empty text="No launches — pump.fun unreachable" />
-
-  return (
-    <div>
-      {launches.map((l, i) => (
-        <RowDiv key={`${l.launchpad}-${l.symbol}-${i}`} href={l.url}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-              <span style={{ fontFamily: "ui-monospace,'SF Mono',monospace", fontSize: 12, fontWeight: 700, color: 'var(--fg)' }}>
-                {l.symbol}
-              </span>
-              <Badge label={chainLabel(l.chain)} color="var(--muted-mid)" />
-              <Badge label={l.launchpad} color="var(--accent)" />
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-              <span style={tsStyle}>{timeAgo(l.createdAt)}</span>
-              <QuickLinks name={l.name} symbol={l.symbol} />
-            </div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 11, color: 'var(--muted-mid)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 160 }}>
-              {l.name}
-            </span>
-            <span style={{ fontFamily: "ui-monospace,'SF Mono',monospace", fontSize: 10, color: 'var(--muted)' }}>
-              {fmtMcap(l.marketCap)}
-            </span>
-          </div>
-        </RowDiv>
-      ))}
-    </div>
-  )
-}
-
 // ─── TRENDING tab (DexScreener boosted) ───────────────────────────────────────
 
 function TrendingTab() {
@@ -284,16 +187,16 @@ function TrendingTab() {
     fetch('/api/dex')
       .then(r => r.ok ? r.json() : { boosts: [], profiles: [] })
       .then(data => {
-        const boosted = (data.boosts ?? []).slice(0, 30)
-        const profiles = (data.profiles ?? []).filter((p: DexToken) => !p.boosted).slice(0, 20)
-        setTokens([...boosted, ...profiles])
+        // Show boosted first, then profiles — all sorted by boost amount desc
+        const boosted: DexToken[] = (data.boosts ?? []).slice(0, 40)
+        setTokens(boosted)
         setLoading(false)
       })
       .catch(() => setLoading(false))
   }, [])
 
   if (loading) return <Spinner />
-  if (tokens.length === 0) return <Empty text="No DexScreener data" />
+  if (tokens.length === 0) return <Empty text="No DexScreener trending data" />
 
   return (
     <div>
@@ -307,12 +210,12 @@ function TrendingTab() {
                 {t.boosted && <Badge label="BOOSTED" color="var(--gold)" />}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                {t.pairCreatedAt != null && <span style={tsStyle}>{timeAgo(t.pairCreatedAt)}</span>}
                 {t.totalAmount != null && (
-                  <span style={{ fontFamily: "ui-monospace,'SF Mono',monospace", fontSize: 9, color: 'var(--gold)', opacity: 0.7 }}>
+                  <span style={{ fontFamily: "ui-monospace,'SF Mono',monospace", fontSize: 9, color: 'var(--gold)', opacity: 0.85 }}>
                     {(t.totalAmount ?? 0).toFixed(0)} pts
                   </span>
                 )}
+                {t.pairCreatedAt != null && <span style={tsStyle}>{timeAgo(t.pairCreatedAt)}</span>}
                 <QuickLinks name={displayName} symbol={displayName} />
               </div>
             </div>
@@ -321,7 +224,7 @@ function TrendingTab() {
               overflow: 'hidden', display: '-webkit-box',
               WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const,
             }}>
-              {t.description ?? t.tokenAddress.slice(0, 12) + '…'}
+              {t.description ?? t.tokenAddress.slice(0, 20) + '…'}
             </span>
           </RowDiv>
         )
@@ -339,29 +242,41 @@ function RedditTab() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    Promise.all(
-      CRYPTO_SUBS.map(sub =>
-        fetch(`https://www.reddit.com/r/${sub}.json?limit=10&t=day`)
-          .then(r => r.ok ? r.json() : null)
-          .then(data => {
-            if (!data?.data?.children) return []
-            return data.data.children.map((c: { data: Record<string, unknown> }) => ({
-              title: c.data.title as string,
-              subreddit: sub,
-              score: (c.data.score as number) ?? 0,
-              comments: (c.data.num_comments as number) ?? 0,
-              url: `https://reddit.com${c.data.permalink as string}`,
-              created_utc: (c.data.created_utc as number) ?? 0,
-            }))
-          })
-          .catch(() => [] as RedditPost[])
-      )
-    ).then(results => {
-      const all: RedditPost[] = results.flat()
-      all.sort((a, b) => b.score - a.score)
-      setPosts(all.slice(0, 40))
-      setLoading(false)
-    })
+    // Use server-side proxy to avoid CORS/bot blocks
+    fetch('/api/reddit')
+      .then(r => r.ok ? r.json() : null)
+      .then((data: { posts?: RedditPost[] } | null) => {
+        if (data?.posts && Array.isArray(data.posts)) {
+          setPosts(data.posts.slice(0, 40))
+          setLoading(false)
+          return
+        }
+        // Fallback: client-side direct (may hit CORS on some networks)
+        return Promise.all(
+          CRYPTO_SUBS.map(sub =>
+            fetch(`https://www.reddit.com/r/${sub}.json?limit=10&t=day`)
+              .then(r => r.ok ? r.json() : null)
+              .then(d => {
+                if (!d?.data?.children) return []
+                return d.data.children.map((c: { data: Record<string, unknown> }) => ({
+                  title: c.data.title as string,
+                  subreddit: sub,
+                  score: (c.data.score as number) ?? 0,
+                  comments: (c.data.num_comments as number) ?? 0,
+                  url: `https://reddit.com${c.data.permalink as string}`,
+                  created_utc: (c.data.created_utc as number) ?? 0,
+                }))
+              })
+              .catch(() => [] as RedditPost[])
+          )
+        ).then(results => {
+          const all = (results as RedditPost[][]).flat()
+          all.sort((a, b) => b.score - a.score)
+          setPosts(all.slice(0, 40))
+          setLoading(false)
+        })
+      })
+      .catch(() => setLoading(false))
   }, [])
 
   if (loading) return <Spinner />
@@ -377,7 +292,7 @@ function RedditTab() {
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
               <span style={{ fontFamily: "ui-monospace,'SF Mono',monospace", fontSize: 9, color: 'var(--muted)' }}>
-                ↑{p.score >= 1000 ? `${((p.score ?? 0) / 1000).toFixed(1)}k` : p.score} · {p.comments}c
+                ↑{p.score >= 1000 ? `${(p.score / 1000).toFixed(1)}k` : p.score} · {p.comments}c
               </span>
               {p.created_utc > 0 && <span style={tsStyle}>{timeAgo(p.created_utc)}</span>}
               <QuickLinks name={p.title.slice(0, 40)} symbol={p.subreddit} />
@@ -392,61 +307,6 @@ function RedditTab() {
           </p>
         </RowDiv>
       ))}
-    </div>
-  )
-}
-
-// ─── DEX tab (new pairs) ──────────────────────────────────────────────────────
-
-function DexTab() {
-  const [tokens, setTokens] = useState<DexToken[]>([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    fetch('/api/dex')
-      .then(r => r.ok ? r.json() : { profiles: [], boosts: [] })
-      .then(data => {
-        const profiles = (data.profiles ?? []).slice(0, 50)
-        setTokens(profiles)
-        setLoading(false)
-      })
-      .catch(() => setLoading(false))
-  }, [])
-
-  if (loading) return <Spinner />
-  if (tokens.length === 0) return <Empty text="No DEX pairs data" />
-
-  return (
-    <div>
-      {tokens.map((t, i) => {
-        const displayName = t.description?.split(' ')[0] ?? t.tokenAddress.slice(0, 8)
-        return (
-          <RowDiv key={`dex-${t.chainId}-${t.tokenAddress}-${i}`} href={t.url}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
-              <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
-                <Badge label={chainLabel(t.chainId)} color="var(--muted-mid)" />
-                {t.boosted && <Badge label="BOOSTED" color="var(--gold)" />}
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                {t.pairCreatedAt != null && <span style={tsStyle}>{timeAgo(t.pairCreatedAt)}</span>}
-                <span style={{ fontFamily: "ui-monospace,'SF Mono',monospace", fontSize: 9, color: 'var(--muted)', maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {t.tokenAddress.slice(0, 8)}…
-                </span>
-                <QuickLinks name={displayName} symbol={displayName} />
-              </div>
-            </div>
-            {t.description && (
-              <p style={{
-                fontSize: 11, color: 'var(--muted-mid)', margin: 0, lineHeight: 1.4,
-                overflow: 'hidden', display: '-webkit-box',
-                WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const,
-              }}>
-                {t.description}
-              </p>
-            )}
-          </RowDiv>
-        )
-      })}
     </div>
   )
 }
@@ -594,6 +454,7 @@ function PoolsTab() {
 }
 
 // ─── Correlation Banner ────────────────────────────────────────────────────────
+// Cross-references: if same term appears in Reddit crypto + Twitter/HN → signal
 
 function CorrelationBanner({ correlations }: { correlations: Correlation[] }) {
   if (correlations.length === 0) return null
@@ -612,7 +473,7 @@ function CorrelationBanner({ correlations }: { correlations: Correlation[] }) {
       {correlations.slice(0, 5).map(c => (
         <div key={c.term} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>
-            🚨 CORRELATION: &ldquo;{c.term.toUpperCase()}&rdquo; appears in {c.sources.join(' + ')}
+            🚨 &ldquo;{c.term.toUpperCase()}&rdquo; trending in {c.sources.join(' + ')}
           </span>
           <a
             href={`https://twitter.com/search?q=${encodeURIComponent(c.term)}&f=live`}
@@ -621,7 +482,7 @@ function CorrelationBanner({ correlations }: { correlations: Correlation[] }) {
             onClick={e => e.stopPropagation()}
             style={{ color: '#fff', textDecoration: 'underline', fontSize: 9, whiteSpace: 'nowrap' as const, flexShrink: 0 }}
           >
-            [view →]
+            [search →]
           </a>
         </div>
       ))}
@@ -632,48 +493,30 @@ function CorrelationBanner({ correlations }: { correlations: Correlation[] }) {
 // ─── AlphaPanel ───────────────────────────────────────────────────────────────
 
 const TABS: { key: Tab; label: string }[] = [
-  { key: 'LAUNCHES', label: 'LAUNCHES' },
   { key: 'TRENDING', label: 'TRENDING' },
   { key: 'REDDIT',   label: 'REDDIT'   },
-  { key: 'DEX',      label: 'DEX'      },
   { key: '4CHAN',    label: '4CHAN'     },
   { key: 'POOLS',    label: 'POOLS'    },
 ]
 
 export function AlphaPanel() {
-  const [tab, setTab] = useState<Tab>('LAUNCHES')
+  const [tab, setTab] = useState<Tab>('TRENDING')
 
-  // Correlation state — fetched independently of tab display
-  const [launchNames,  setLaunchNames]  = useState<string[]>([])
+  // Correlation: cross-ref Reddit crypto vs Twitter/HN
   const [redditTitles, setRedditTitles] = useState<string[]>([])
   const [hnTitles,     setHnTitles]     = useState<string[]>([])
   const [socialTerms,  setSocialTerms]  = useState<string[]>([])
 
   useEffect(() => {
-    // Pump.fun launches for correlation
-    const pumpUrl = 'https://frontend-api.pump.fun/coins?limit=20&sort=created_timestamp&order=DESC&includeNsfw=true'
-    fetch(pumpUrl)
-      .then(r => r.ok ? r.json() : [])
-      .catch(() => [])
-      .then((coins: Record<string, unknown>[]) => {
-        if (Array.isArray(coins)) setLaunchNames(coins.map(c => (c.name as string) ?? ''))
+    // Reddit titles
+    fetch('/api/reddit')
+      .then(r => r.ok ? r.json() : null)
+      .then((data: { posts?: { title: string }[] } | null) => {
+        if (data?.posts) setRedditTitles(data.posts.map(p => p.title))
       })
+      .catch(() => {})
 
-    // Reddit titles for correlation
-    Promise.all(
-      ['CryptoCurrency', 'SatoshiStreetBets', 'memecoins', 'solana'].map(sub =>
-        fetch(`https://www.reddit.com/r/${sub}.json?limit=10&t=day`)
-          .then(r => r.ok ? r.json() : null)
-          .catch(() => null)
-      )
-    ).then(results => {
-      const titles = results.flatMap(data =>
-        data?.data?.children?.map((c: { data: { title: string } }) => c.data.title as string) ?? []
-      )
-      setRedditTitles(titles)
-    })
-
-    // HN trends for correlation
+    // HN trends
     fetch('/api/trends')
       .then(r => r.ok ? r.json() : [])
       .then((data: { title?: string }[]) => {
@@ -681,7 +524,7 @@ export function AlphaPanel() {
       })
       .catch(() => {})
 
-    // Social/Twitter trends for correlation
+    // Twitter trends
     fetch('/api/social')
       .then(r => r.ok ? r.json() : {})
       .then((data: { twitter?: { trends?: Array<{ name?: string; topic?: string }> } }) => {
@@ -691,9 +534,9 @@ export function AlphaPanel() {
       .catch(() => {})
   }, [])
 
-  // Compute correlations when any source data changes
+  // Term appears in Reddit AND (HN or Twitter) → correlation
   const correlations = useMemo<Correlation[]>(() => {
-    if (launchNames.length === 0) return []
+    if (redditTitles.length === 0) return []
 
     const redditWords = new Set(redditTitles.flatMap(extractWords))
     const hnWords     = new Set(hnTitles.flatMap(extractWords))
@@ -702,22 +545,19 @@ export function AlphaPanel() {
     const found: Correlation[] = []
     const seen  = new Set<string>()
 
-    for (const name of launchNames) {
-      for (const word of extractWords(name)) {
-        if (seen.has(word)) continue
-        const sources: string[] = []
-        if (redditWords.has(word)) sources.push('REDDIT')
-        if (hnWords.has(word))     sources.push('VIRAL')
-        if (socialWords.has(word)) sources.push('TWITTER')
-        if (sources.length > 0) {
-          found.push({ term: word, sources: ['LAUNCHES', ...sources] })
-          seen.add(word)
-        }
+    for (const word of redditWords) {
+      if (seen.has(word)) continue
+      const sources: string[] = ['REDDIT']
+      if (hnWords.has(word))     sources.push('VIRAL')
+      if (socialWords.has(word)) sources.push('TWITTER')
+      if (sources.length >= 2) {
+        found.push({ term: word, sources })
+        seen.add(word)
       }
     }
 
     return found.slice(0, 10)
-  }, [launchNames, redditTitles, hnTitles, socialTerms])
+  }, [redditTitles, hnTitles, socialTerms])
 
   return (
     <div>
@@ -733,7 +573,7 @@ export function AlphaPanel() {
         04 / ALPHA
       </p>
 
-      {/* Correlation banner — shown above tabs */}
+      {/* Correlation banner */}
       <CorrelationBanner correlations={correlations} />
 
       {/* Tab bar */}
@@ -754,7 +594,7 @@ export function AlphaPanel() {
               background: 'none',
               border: 'none',
               borderBottom: tab === key ? '1px solid var(--accent)' : '1px solid transparent',
-              padding: '6px 8px',
+              padding: '6px 10px',
               cursor: 'pointer',
               letterSpacing: '0.1em',
               marginBottom: -1,
@@ -767,7 +607,7 @@ export function AlphaPanel() {
         ))}
       </div>
 
-      {/* Tab content — scrollable panel */}
+      {/* Tab content */}
       <div style={{
         backgroundColor: 'var(--surface)',
         border: '1px solid var(--border)',
@@ -775,10 +615,8 @@ export function AlphaPanel() {
         maxHeight: 720,
         overflowY: 'auto' as const,
       }}>
-        {tab === 'LAUNCHES' && <LaunchesTab />}
         {tab === 'TRENDING' && <TrendingTab />}
         {tab === 'REDDIT'   && <RedditTab />}
-        {tab === 'DEX'      && <DexTab />}
         {tab === '4CHAN'    && <FourChanTab />}
         {tab === 'POOLS'    && <PoolsTab />}
       </div>

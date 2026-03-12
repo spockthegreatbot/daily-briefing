@@ -1,24 +1,36 @@
 export const revalidate = 300
 
+const CRYPTO_SUBS = ['CryptoCurrency', 'SatoshiStreetBets', 'memecoins', 'solana']
+
 export async function GET() {
   try {
-    const res = await fetch('https://www.reddit.com/r/all.json?limit=15&t=day', {
-      headers: { 'User-Agent': 'DailyBriefing/1.0' },
-      next: { revalidate: 300 },
-    })
-    if (!res.ok) return Response.json([])
-    const data = await res.json()
-    const posts =
-      data?.data?.children?.map((c: { data: { title: string; subreddit: string; score: number; num_comments: number; permalink: string; link_flair_text: string | null } }) => ({
-        title: c.data.title,
-        subreddit: c.data.subreddit,
-        score: c.data.score,
-        comments: c.data.num_comments,
-        url: `https://reddit.com${c.data.permalink}`,
-        flair: c.data.link_flair_text,
-      })) ?? []
-    return Response.json(posts)
+    const results = await Promise.all(
+      CRYPTO_SUBS.map(sub =>
+        fetch(`https://www.reddit.com/r/${sub}.json?limit=12&t=day`, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; DailyBriefing/1.0)' },
+          next: { revalidate: 300 },
+        })
+          .then(r => r.ok ? r.json() : null)
+          .then(data => {
+            if (!data?.data?.children) return []
+            return data.data.children.map((c: { data: Record<string, unknown> }) => ({
+              title: c.data.title as string,
+              subreddit: sub,
+              score: (c.data.score as number) ?? 0,
+              comments: (c.data.num_comments as number) ?? 0,
+              url: `https://reddit.com${c.data.permalink as string}`,
+              created_utc: (c.data.created_utc as number) ?? 0,
+            }))
+          })
+          .catch(() => [])
+      )
+    )
+
+    const posts = results.flat()
+    posts.sort((a, b) => b.score - a.score)
+
+    return Response.json({ posts: posts.slice(0, 50) })
   } catch {
-    return Response.json([])
+    return Response.json({ posts: [] })
   }
 }
