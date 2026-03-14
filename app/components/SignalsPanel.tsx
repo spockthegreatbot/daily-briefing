@@ -15,6 +15,9 @@ type TikTokHashtag = {
   name: string
   views: number
   viewsFormatted: string
+  posts: number
+  postsFormatted: string
+  rank: number
   trend: 'up' | 'down' | 'new' | 'stable'
   category: string | null
 }
@@ -199,7 +202,7 @@ export function SignalsPanel() {
                           <CategoryTag category={h.category} />
                         </div>
                         <span style={{ fontFamily: "ui-monospace,'SF Mono',monospace", fontSize: 10, color: 'var(--accent, var(--muted))' }}>
-                          {h.viewsFormatted} views
+                          {h.viewsFormatted} views · {h.postsFormatted || '—'} posts
                         </span>
                       </div>
                       <span style={{

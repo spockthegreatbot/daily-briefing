@@ -4,6 +4,9 @@ type TikTokHashtag = {
   name: string
   views: number
   viewsFormatted: string
+  posts: number
+  postsFormatted: string
+  rank: number
   trend: 'up' | 'down' | 'new' | 'stable'
   category: string | null
 }
@@ -21,113 +24,100 @@ function detectCategory(name: string): string | null {
   return null
 }
 
-function formatViews(n: number): string {
+function formatNum(n: number): string {
   if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
   return `${n}`
 }
 
-async function fetchFromCreativeCenter(): Promise<TikTokHashtag[]> {
-  // Try the Creative Center API
-  const url = 'https://ads.tiktok.com/creative_radar_api/v1/popular_trend/hashtag/list'
-  const params = new URLSearchParams({
-    page: '1',
-    limit: '20',
-    period: '7',
-    country_code: 'US',
-    sort_by: 'popular',
-  })
-
-  const res = await fetch(`${url}?${params}`, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      'Accept': 'application/json',
-      'Referer': 'https://ads.tiktok.com/business/creativecenter/inspiration/popular/hashtag/pc/en',
-    },
-    next: { revalidate: 600 },
-  })
-
-  if (!res.ok) return []
-
-  const data = await res.json()
-
-  if (data?.code !== 0 || !data?.data?.list) return []
-
-  return data.data.list.slice(0, 20).map((item: Record<string, unknown>) => {
-    const name = (item.hashtag_name as string) || (item.name as string) || ''
-    const views = (item.publish_cnt as number) || (item.video_views as number) || (item.view_count as number) || 0
-    const trendVal = (item.trend as number) || 0
-
-    return {
-      name,
-      views,
-      viewsFormatted: formatViews(views),
-      trend: trendVal > 0 ? 'up' : trendVal < 0 ? 'down' : 'new',
-      category: detectCategory(name),
-    } as TikTokHashtag
-  })
-}
-
-async function fetchFromPage(): Promise<TikTokHashtag[]> {
-  // Scrape the Creative Center page as fallback
-  const res = await fetch(
-    'https://ads.tiktok.com/business/creativecenter/inspiration/popular/hashtag/pc/en',
-    {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html',
-      },
-      next: { revalidate: 600 },
-    }
-  )
-
-  if (!res.ok) return []
-
-  const html = await res.text()
-
-  // Try to extract __NEXT_DATA__ or embedded JSON
-  const nextDataMatch = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/)
-  if (nextDataMatch) {
-    try {
-      const nextData = JSON.parse(nextDataMatch[1])
-      const hashtags = nextData?.props?.pageProps?.hashtags ||
-        nextData?.props?.pageProps?.data?.list || []
-
-      return hashtags.slice(0, 20).map((item: Record<string, unknown>) => {
-        const name = (item.hashtag_name as string) || (item.name as string) || ''
-        const views = (item.publish_cnt as number) || (item.video_views as number) || 0
-        return {
-          name,
-          views,
-          viewsFormatted: formatViews(views),
-          trend: 'new' as const,
-          category: detectCategory(name),
-        }
-      })
-    } catch {
-      // JSON parse failed
-    }
-  }
-
-  return []
+// rankDiffType: 1 = moved up, 2 = moved down, 3 = no change, 4 = new entry
+function parseTrend(rankDiffType: number | null, rankDiff: number | null): 'up' | 'down' | 'new' | 'stable' {
+  if (rankDiffType === 4) return 'new'
+  if (rankDiffType === 1) return 'up'
+  if (rankDiffType === 2) return 'down'
+  if (rankDiffType === 3) return 'stable'
+  if (rankDiff !== null && rankDiff > 0) return 'up'
+  if (rankDiff !== null && rankDiff < 0) return 'down'
+  return 'stable'
 }
 
 export async function GET() {
   try {
-    // Try API first, fall back to page scraping
-    let hashtags = await fetchFromCreativeCenter()
+    // Scrape TikTok Creative Center page — data is embedded in __NEXT_DATA__
+    const res = await fetch(
+      'https://ads.tiktok.com/business/creativecenter/inspiration/popular/hashtag/pc/en',
+      {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml',
+          'Accept-Language': 'en-US,en;q=0.9',
+        },
+        next: { revalidate: 600 },
+      }
+    )
 
-    if (hashtags.length === 0) {
-      hashtags = await fetchFromPage()
+    if (!res.ok) {
+      return Response.json({
+        hashtags: [],
+        source: 'tiktok-creative-center',
+        error: `TikTok returned ${res.status}`,
+        generated: new Date().toISOString(),
+      })
     }
 
-    // If both fail, return a message
+    const html = await res.text()
+
+    // Extract __NEXT_DATA__ which contains pre-fetched React Query data
+    const nextDataMatch = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/)
+    if (!nextDataMatch) {
+      return Response.json({
+        hashtags: [],
+        source: 'tiktok-creative-center',
+        error: 'Could not find embedded data on TikTok page',
+        generated: new Date().toISOString(),
+      })
+    }
+
+    const nextData = JSON.parse(nextDataMatch[1])
+    const queries = nextData?.props?.pageProps?.dehydratedState?.queries || []
+
+    let hashtags: TikTokHashtag[] = []
+
+    for (const q of queries) {
+      const data = q?.state?.data
+      if (data?.pages && Array.isArray(data.pages) && data.pages.length > 0) {
+        const items = data.pages[0]?.list
+        if (Array.isArray(items) && items.length > 0) {
+          hashtags = items.slice(0, 20).map((item: Record<string, unknown>) => {
+            const name = (item.hashtagName as string) || ''
+            const views = (item.videoViews as number) || 0
+            const posts = (item.publishCnt as number) || 0
+            const rank = (item.rank as number) || 0
+            const rankDiff = item.rankDiff as number | null
+            const rankDiffType = item.rankDiffType as number | null
+
+            return {
+              name,
+              views,
+              viewsFormatted: formatNum(views),
+              posts,
+              postsFormatted: formatNum(posts),
+              rank,
+              trend: parseTrend(rankDiffType, rankDiff),
+              category: detectCategory(name),
+            }
+          })
+          break
+        }
+      }
+    }
+
     if (hashtags.length === 0) {
       return Response.json({
         hashtags: [],
         source: 'tiktok-creative-center',
-        error: 'TikTok Creative Center API requires authentication. Data unavailable.',
+        error: 'No hashtag data found in page',
         generated: new Date().toISOString(),
       })
     }
@@ -137,10 +127,11 @@ export async function GET() {
       source: 'tiktok-creative-center',
       generated: new Date().toISOString(),
     })
-  } catch {
+  } catch (err) {
     return Response.json({
       hashtags: [],
       source: 'tiktok-creative-center',
+      error: err instanceof Error ? err.message : 'Unknown error',
       generated: new Date().toISOString(),
     })
   }
