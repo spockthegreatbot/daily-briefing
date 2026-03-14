@@ -32,7 +32,7 @@ export async function GET(request: Request) {
 
   try {
     // Fetch news from both sources
-    const [guardianRes, newsapiRes, cryptoRes, fngRes, redditRes] = await Promise.all([
+    const [guardianRes, newsapiRes, cryptoRes, fngRes, redditRes, tiktokRes, googleRes] = await Promise.all([
       fetch(`https://content.guardianapis.com/search?api-key=${GUARDIAN_KEY}&show-fields=headline&page-size=8&order-by=newest`, { next: { revalidate: 300 } })
         .then(r => r.ok ? r.json() : null).catch(() => null),
       fetch(`https://newsapi.org/v2/top-headlines?language=en&pageSize=8&apiKey=${NEWSAPI_KEY}`, { next: { revalidate: 300 } })
@@ -42,6 +42,10 @@ export async function GET(request: Request) {
       fetch('https://api.alternative.me/fng/?limit=1')
         .then(r => r.ok ? r.json() : null).catch(() => null),
       fetch(`${origin}/api/reddit`)
+        .then(r => r.ok ? r.json() : null).catch(() => null),
+      fetch(`${origin}/api/tiktok-trends`)
+        .then(r => r.ok ? r.json() : null).catch(() => null),
+      fetch(`${origin}/api/google-trends`)
         .then(r => r.ok ? r.json() : null).catch(() => null),
     ])
 
@@ -106,15 +110,56 @@ export async function GET(request: Request) {
     if (redditRes?.posts?.length > 0) {
       const topPost = redditRes.posts[0]
       items.push({
-        text: `Reddit r/${topPost.subreddit}: "${topPost.title.slice(0, 80)}${topPost.title.length > 80 ? '…' : ''}" (${topPost.score} upvotes)`,
+        text: `Reddit r/${topPost.subreddit}: "${topPost.title.slice(0, 80)}${topPost.title.length > 80 ? '…' : ''}"${topPost.score > 0 ? ` (${topPost.score} upvotes)` : ''}`,
         tag: '🔥 Trending',
         source: 'Reddit',
       })
     }
 
-    // Cap at 7 items
+    // TikTok trends — include crypto/market-related hashtags
+    const cryptoRegex = /\b(crypto|bitcoin|btc|eth|ethereum|solana|sol|memecoin|shib|doge|nft|defi|web3|blockchain|altcoin|token|pump|moon|coin)\b/i
+    const marketRegex = /\b(stock|market|trading|invest|finance|money|forex|gold|inflation|recession|tariff|economy)\b/i
+
+    if (tiktokRes?.hashtags?.length > 0) {
+      const relevantTikTok = tiktokRes.hashtags.filter(
+        (h: { name: string; category: string | null }) =>
+          cryptoRegex.test(h.name) || marketRegex.test(h.name) ||
+          h.category === 'crypto' || h.category === 'market'
+      )
+      if (relevantTikTok.length > 0) {
+        const tags = relevantTikTok.slice(0, 3).map(
+          (h: { name: string; viewsFormatted: string }) => `#${h.name} (${h.viewsFormatted} views)`
+        ).join(', ')
+        items.push({
+          text: `TikTok trending crypto/market: ${tags}`,
+          tag: '🔥 Trending',
+          source: 'TikTok',
+        })
+      }
+    }
+
+    // Google Trends — include crypto/market-related searches
+    if (googleRes?.trends?.length > 0) {
+      const relevantGoogle = googleRes.trends.filter(
+        (t: { title: string; category: string | null }) =>
+          cryptoRegex.test(t.title) || marketRegex.test(t.title) ||
+          t.category === 'crypto' || t.category === 'market'
+      )
+      if (relevantGoogle.length > 0) {
+        const topics = relevantGoogle.slice(0, 2).map(
+          (t: { title: string; traffic: string }) => `${t.title} (${t.traffic} searches)`
+        ).join(', ')
+        items.push({
+          text: `Google trending: ${topics}`,
+          tag: '🔥 Trending',
+          source: 'Google Trends',
+        })
+      }
+    }
+
+    // Cap at 9 items (expanded for new sources)
     return Response.json({
-      items: items.slice(0, 7),
+      items: items.slice(0, 9),
       generated: new Date().toISOString(),
     })
   } catch {

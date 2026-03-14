@@ -55,7 +55,7 @@ export default function Page() {
         </main>
 
         <footer className="border-t border-white/[0.06] px-6 py-4 text-center font-mono text-[10px] text-[var(--muted)] tracking-widest mt-8">
-          DAILY BRIEFING · AUTO-REFRESH 5MIN · GUARDIAN · NEWSAPI · COINGECKO · ALTERNATIVE.ME · REDDIT · HACKERNEWS
+          DAILY BRIEFING · AUTO-REFRESH 5MIN · GUARDIAN · NEWSAPI · COINGECKO · ALTERNATIVE.ME · REDDIT · TIKTOK · GOOGLE TRENDS · HACKERNEWS
         </footer>
       </div>
     </RefreshProvider>
